@@ -1,0 +1,74 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:San11PVPToolClient.ViewModels"
+             mc:Ignorable="d"
+             x:Class="San11PVPToolClient.Views.LobbyView"
+             x:DataType="vm:LobbyViewModel">
+  <DockPanel>
+
+    <DockPanel DockPanel.Dock="Top"
+               Margin="10">
+
+      <TextBlock DockPanel.Dock="Left"
+                 Text="联机大厅" FontSize="22" FontWeight="Bold" />
+
+      <Button DockPanel.Dock="Left"
+              Content="刷新"
+              Margin="20,0,5,0"
+              Command="{Binding GetRoomListCommand}" />
+
+      <Button DockPanel.Dock="Left"
+              Content="创建房间"
+              Command="{Binding CreateRoomCommand}"
+              Margin="5,0" />
+
+      <Button DockPanel.Dock="Right"
+              Content="设置"
+              Command="{Binding SettingsCommand}"
+              Margin="5,0" />
+
+      <Button DockPanel.Dock="Right"
+              Content="关于联机工具"
+              Command="{Binding AboutCommand}"
+              Margin="5,0" />
+
+      <Panel />
+    </DockPanel>
+
+    <!-- 房间列表 -->
+    <DataGrid ItemsSource="{Binding Rooms}"
+              AutoGenerateColumns="False" MinWidth="100" MinHeight="100"
+              Margin="10">
+
+      <DataGrid.Columns>
+
+        <DataGridTextColumn Header="房间名"
+                            Binding="{Binding RoomName}" />
+
+        <DataGridTextColumn Header="房主"
+                            Binding="{Binding OwnerName}" />
+
+        <DataGridTextColumn Header="人数"
+                            Binding="{Binding PlayerCountDisplay}" />
+
+        <DataGridTextColumn Header="密码"
+                            Binding="{Binding HasPassword}" />
+
+        <DataGridTemplateColumn Header="操作">
+          <DataGridTemplateColumn.CellTemplate>
+            <DataTemplate>
+              <Button Content="加入" Margin="5"
+                      Command="{Binding $parent[DataGrid].((vm:LobbyViewModel)DataContext).JoinRoomCommand}"
+                      CommandParameter="{Binding}" />
+            </DataTemplate>
+          </DataGridTemplateColumn.CellTemplate>
+        </DataGridTemplateColumn>
+
+      </DataGrid.Columns>
+
+    </DataGrid>
+
+  </DockPanel>
+</UserControl>

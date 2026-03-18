@@ -1,0 +1,57 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:San11PVPToolClient.ViewModels"
+             xmlns:services="using:San11PVPToolClient.Services"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             x:Class="San11PVPToolClient.Views.AboutView"
+             x:DataType="vm:AboutViewModel">
+  <Panel>
+    <Button Content="返回" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="6,6,0,0"
+            Command="{Binding BackCommand}" />
+
+    <Border Padding="20" HorizontalAlignment="Center">
+      <StackPanel Spacing="16">
+        <StackPanel Orientation="Horizontal" Spacing="16">
+          <Image Width="64" Height="64" Source="/Assets/pvpTool.ico" />
+          <StackPanel>
+            <TextBlock Text="{x:Static services:AppInfo.Name}"
+                       FontSize="22"
+                       FontWeight="Bold" />
+            <TextBlock Opacity="0.7">
+              <Run Text="Version" />
+              <Run Text="{x:Static services:AppInfo.VersionDisplay}" />
+            </TextBlock>
+            <TextBlock Margin="0,4,0,0">
+              <Run Text="Author:" />
+              <Run Text="{x:Static services:AppInfo.Author}" />
+            </TextBlock>
+          </StackPanel>
+        </StackPanel>
+
+        <StackPanel>
+          <TextBlock Text="简介"
+                     FontWeight="Bold" />
+          <TextBlock TextWrapping="Wrap"
+                     Opacity="0.8">
+            三国志11专用联机工具，局域网联机，自动收发存档
+          </TextBlock>
+        </StackPanel>
+
+        <StackPanel>
+          <TextBlock Text="开源信息"
+                     FontWeight="Bold" />
+          <StackPanel Margin="0,4,0,0">
+            <TextBlock Text="GitHub"
+                       Foreground="DodgerBlue"
+                       Cursor="Hand"
+                       PointerPressed="GitHub_OnPointerPressed" />
+            <TextBlock Text="License: GPL-3.0 License" />
+          </StackPanel>
+        </StackPanel>
+
+      </StackPanel>
+    </Border>
+  </Panel>
+</UserControl>

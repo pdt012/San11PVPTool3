@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="San11PVPToolClient/San11PVPToolClient.csproj" />
+  <Project Path="San11PVPToolServer/San11PVPToolServer.csproj" />
+  <Project Path="San11PVPToolShared/San11PVPToolShared.csproj" Id="998b6b57-32ce-4f03-8f58-2d057364312f" />
+</Solution>

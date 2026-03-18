@@ -1,0 +1,326 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.IO;
+using System.Linq;
+using System.Reactive;
+using System.Reactive.Disposables;
+using System.Reactive.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Avalonia.Threading;
+using ReactiveUI;
+using San11PVPToolClient.Models;
+using San11PVPToolClient.Services;
+using San11PVPToolShared.Models;
+
+namespace San11PVPToolClient.ViewModels;
+
+public class RoomViewModel : ViewModelBase, IRoutableViewModel
+{
+    public string UrlPathSegment => "room";
+    public IScreen HostScreen { get; }
+
+    public bool IsRoomOwner => UserInfo != null && UserInfo.IsRoomOwner;
+
+    public PlayerInfo? UserInfo
+    {
+        get;
+        set => this.RaiseAndSetIfChanged(ref field, value);
+    }
+
+    public RoomInfo? RoomInfo
+    {
+        get;
+        set => this.RaiseAndSetIfChanged(ref field, value);
+    }
+
+    public string InputText
+    {
+        get;
+        set => this.RaiseAndSetIfChanged(ref field, value);
+    } = "";
+
+    public ObservableCollection<MessageItem> Messages { get; } = new();
+
+
+    private readonly OnlineService _client;
+    private readonly UserConfigService _userConfigService;
+
+    private CancellationTokenSource _cts;
+
+    public ReactiveCommand<Unit, Unit> LeaveRoomCommand { get; }
+    public ReactiveCommand<Unit, Unit> CloseRoomCommand { get; }
+    public ReactiveCommand<Unit, Unit> UploadSaveCommand { get; }
+    public ReactiveCommand<Unit, Unit> DownloadSaveCommand { get; }
+    public ReactiveCommand<Unit, Unit> SendMessageCommand { get; }
+    public ReactiveCommand<Unit, Unit> ClearMessagesCommand { get; }
+    public ReactiveCommand<Unit, Unit> SetRoomConfigCommand { get; }
+    public ReactiveCommand<PlayerInfo, Unit> SetKingNameCommand { get; }
+    public ReactiveCommand<PlayerInfo, Unit> SetOwnerCommand { get; }
+    public ReactiveCommand<PlayerInfo, Unit> KickPlayerCommand { get; }
+
+    public Interaction<Unit, RoomConfig?> SetRoomConfigInteraction { get; } = new();
+    public Interaction<PlayerInfo, string?> SetKingNameInteraction { get; } = new();
+
+    public RoomViewModel(IScreen screen, OnlineService client, UserConfigService userConfigService)
+    {
+        HostScreen = screen;
+        _client = client;
+        _userConfigService = userConfigService;
+
+        LeaveRoomCommand = ReactiveCommand.CreateFromTask(LeaveRoom);
+        CloseRoomCommand = ReactiveCommand.CreateFromTask(CloseRoom);
+        UploadSaveCommand = ReactiveCommand.CreateFromTask(UploadSave);
+        DownloadSaveCommand = ReactiveCommand.CreateFromTask(DownloadSave);
+        SendMessageCommand = ReactiveCommand.CreateFromTask(SendMessage);
+        ClearMessagesCommand = ReactiveCommand.Create(ClearMessage);
+        SetRoomConfigCommand = ReactiveCommand.CreateFromTask(SetRoomConfig);
+        SetKingNameCommand = ReactiveCommand.CreateFromTask<PlayerInfo>(SetKingName);
+        SetOwnerCommand = ReactiveCommand.CreateFromTask<PlayerInfo>(SetOwner);
+        KickPlayerCommand = ReactiveCommand.CreateFromTask<PlayerInfo>(KickPlayer);
+    }
+
+    protected override void DoWhenActivated(CompositeDisposable disposable)
+    {
+        _client.Events.LoginStateChanged
+            .ObserveOn(RxApp.MainThreadScheduler)
+            .Subscribe(x =>
+            {
+                UserInfo = x.Item1;
+                RoomInfo = x.Item2;
+                this.RaisePropertyChanged(nameof(IsRoomOwner));
+            })
+            .DisposeWith(disposable);
+
+        _client.Events.SocketConnected
+            .Subscribe(_ =>
+            {
+                AddSystemMessage("成功连接到服务器");
+            })
+            .DisposeWith(disposable);
+
+        _client.Events.SocketDisconnected
+            .Subscribe(async active =>
+            {
+                AddSystemMessage("连接中断", MessageLevel.Warning);
+                if (!_client.IsTerminated) // 没有彻底终止连接，说明是网络问题，尝试重连
+                {
+                    for (int i = 0; i < 5; i++)
+                    {
+                        try
+                        {
+                            AddSystemMessage($"尝试重连({i + 1}/5)...");
+                            await _client.Reconnect(_cts.Token);
+                            break;
+                        }
+                        catch
+                        {
+                            // ignored
+                        }
+                        await Task.Delay(3000);
+                    }
+                }
+            })
+            .DisposeWith(disposable);
+
+        _client.Events.PlayerKicked
+            .Subscribe(async void (eventData) =>
+            {
+                var byPlayer = eventData.ByPlayer;
+                if (eventData.KickedPlayer.PlayerId == UserInfo?.PlayerId)
+                {
+                    AddSystemMessage($"你被{eventData.ByPlayer.Name}踢出房间");
+                    await _client.TerminateSocket();
+                }
+                else
+                {
+                    AddSystemMessage($"{eventData.KickedPlayer.Name}被{eventData.ByPlayer.Name}踢出房间");
+                }
+            })
+            .DisposeWith(disposable);
+
+        _client.Events.RoomClosed
+            .Subscribe(async _ =>
+            {
+                AddSystemMessage("房间已关闭");
+                await _client.TerminateSocket();
+            })
+            .DisposeWith(disposable);
+
+        _client.Events.RoomInfoUpdated
+            .Subscribe(eventData =>
+            {
+                RoomInfo = eventData.RoomInfo;
+                if (!string.IsNullOrEmpty(eventData.Message))
+                    AddSystemMessage(eventData.Message);
+                // 顺便更新自己的信息
+                var myInfo = RoomInfo?.Players.FirstOrDefault(p => p.PlayerId == UserInfo?.PlayerId);
+                if (myInfo != null)
+                    UserInfo = myInfo;
+            })
+            .DisposeWith(disposable);
+
+        _client.Events.SaveUploaded
+            .Subscribe(eventData =>
+            {
+                var player = eventData.Player;
+                if (player.PlayerId == UserInfo?.PlayerId)
+                {
+                    AddSystemMessage("存档上传成功");
+                }
+                else
+                {
+                    AddSystemMessage($"{player.Name}上传了存档");
+                }
+            })
+            .DisposeWith(disposable);
+
+        _client.Events.SystemMessageReceived
+            .Subscribe(sysMsg =>
+            {
+                AddSystemMessage(sysMsg.Message);
+            })
+            .DisposeWith(disposable);
+
+        _client.Events.ChatMessageReceived
+            .Subscribe(chatMsg =>
+            {
+                AddPlayerMessage(chatMsg);
+            })
+            .DisposeWith(disposable);
+
+        _cts = new CancellationTokenSource();
+        // 当 deactivate 时自动取消
+        Disposable.Create(() =>
+            {
+                _cts.Cancel();
+                _cts.Dispose();
+            })
+            .DisposeWith(disposable);
+    }
+
+    private async Task LeaveRoom()
+    {
+        try
+        {
+            await _client.LeaveRoom();
+            await HostScreen.Router.NavigateBack.Execute();
+        }
+        catch (Exception ex)
+        {
+            AddSystemMessage($"连接失败：{ex.Message}", MessageLevel.Error);
+        }
+    }
+
+    private async Task CloseRoom()
+    {
+        try
+        {
+            await _client.CloseRoom();
+        }
+        catch (Exception ex)
+        {
+            AddSystemMessage($"连接失败：{ex.Message}", MessageLevel.Error);
+        }
+    }
+
+    private async Task UploadSave()
+    {
+        try
+        {
+            string baseSavePath = Path.Combine(_userConfigService.Config.SaveDataDir, "Save031.s11");
+            if (!File.Exists(baseSavePath))
+            {
+                AddSystemMessage($"存档不存在：\"{baseSavePath}\"", MessageLevel.Error);
+                return;
+            }
+
+            List<string> paths = [baseSavePath];
+
+            foreach (var extension in new[] { ".exsav", ".xml" })
+            {
+                string exPath = Path.ChangeExtension(baseSavePath, extension);
+                if (File.Exists(exPath))
+                    paths.Add(exPath);
+            }
+
+            await _client.UploadSave(paths);
+        }
+        catch (Exception ex)
+        {
+            AddSystemMessage($"上传失败：{ex.Message}", MessageLevel.Error);
+        }
+    }
+
+    private async Task DownloadSave()
+    {
+        try
+        {
+            await _client.DownloadSave(Path.Combine(_userConfigService.Config.SaveDataDir, "Save031.s11"));
+        }
+        catch (Exception ex)
+        {
+            AddSystemMessage($"下载失败：{ex.Message}", MessageLevel.Error);
+        }
+    }
+
+    private async Task SendMessage()
+    {
+        try
+        {
+            await _client.SendMessage(InputText);
+            InputText = "";
+        }
+        catch (Exception ex)
+        {
+            AddSystemMessage($"连接失败：{ex.Message}", MessageLevel.Error);
+        }
+    }
+
+    private void ClearMessage()
+    {
+        Messages.Clear();
+    }
+
+    private async Task SetRoomConfig()
+    {
+        var roomConfig = await SetRoomConfigInteraction.Handle(Unit.Default);
+        if (roomConfig == null) return;
+        await _client.SetRoomConfig(roomConfig);
+    }
+
+    private async Task SetKingName(PlayerInfo player)
+    {
+        string? kingName = await SetKingNameInteraction.Handle(player);
+        if (kingName == null) return;
+        await _client.SetKingName(player.PlayerId, kingName);
+    }
+
+    private async Task SetOwner(PlayerInfo player)
+    {
+        await _client.SetOwner(player.PlayerId);
+    }
+
+    private async Task KickPlayer(PlayerInfo player)
+    {
+        await _client.KickPlayer(player.PlayerId);
+    }
+
+    public void AddSystemMessage(string msg, MessageLevel level = MessageLevel.Normal)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            Messages.Add(new("", "", msg, DateTime.Now, true, level));
+        });
+    }
+
+    public void AddPlayerMessage(ChatMessage message)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            Messages.Add(new(message.SenderId, message.SenderName, message.Message, DateTime.Now,
+                DisplayAlignment: message.SenderId == UserInfo?.PlayerId ? "Right" : "Left"));
+        });
+    }
+}

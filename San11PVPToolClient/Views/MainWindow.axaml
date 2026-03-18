@@ -1,0 +1,31 @@
+﻿<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:San11PVPToolClient.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:rxui="using:Avalonia.ReactiveUI"
+        xmlns:app="using:San11PVPToolClient"
+        xmlns:services="using:San11PVPToolClient.Services"
+        mc:Ignorable="d" d:DesignWidth="500" d:DesignHeight="300"
+        x:Class="San11PVPToolClient.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Width="500" Height="300"
+        Icon="/Assets/pvpTool.ico"
+        Title="{x:Static services:AppInfo.AppTitle}"
+        FontFamily="Microsoft YaHei">
+
+  <Design.DataContext>
+    <vm:MainViewModel />
+  </Design.DataContext>
+
+  <Grid>
+
+    <rxui:RoutedViewHost Router="{Binding Router}">
+      <rxui:RoutedViewHost.ViewLocator>
+        <app:AppViewLocator />
+      </rxui:RoutedViewHost.ViewLocator>
+    </rxui:RoutedViewHost>
+
+  </Grid>
+
+</Window>

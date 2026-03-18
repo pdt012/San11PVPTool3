@@ -1,0 +1,48 @@
+﻿<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="using:San11PVPToolClient.Dialogs"
+        mc:Ignorable="d"
+        SizeToContent="WidthAndHeight"
+        x:Class="San11PVPToolClient.Dialogs.RoomConfigDialog"
+        x:DataType="local:RoomConfigDialogViewModel"
+        Icon="/Assets/pvpTool.ico"
+        Title="RoomConfigDialog">
+  <Window.Styles>
+    <Style Selector="TextBlock.Label">
+      <Setter Property="VerticalAlignment" Value="Bottom" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="Margin" Value="6,6,0,0" />
+    </Style>
+
+    <Style Selector="TextBox.Entry">
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="Margin" Value="3" />
+    </Style>
+
+    <Style Selector="NumericUpDown.Entry">
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="Margin" Value="3" />
+    </Style>
+  </Window.Styles>
+
+  <StackPanel Margin="50,10" HorizontalAlignment="Center">
+    <TextBlock Text="房间名" Classes="Label" />
+    <TextBox Text="{Binding RoomName}"
+             Classes="Entry" Width="200" />
+
+    <TextBlock Text="密码" Classes="Label" />
+    <TextBox Text="{Binding Password}"
+             Classes="Entry" Width="200" />
+
+    <TextBlock Text="最大玩家数" Classes="Label" />
+    <NumericUpDown Value="{Binding MaxPlayers}" Minimum="2" Maximum="8"
+                   Classes="Entry" Width="200" />
+
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+      <Button Content="确认" Click="ButtonConfirm_Click" Margin="10" />
+      <Button Content="取消" Click="ButtonClose_Click" Margin="10" />
+    </StackPanel>
+  </StackPanel>
+</Window>

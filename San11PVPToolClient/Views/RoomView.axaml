@@ -1,0 +1,222 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:San11PVPToolClient.ViewModels"
+             xmlns:m="using:San11PVPToolClient.Models"
+             xmlns:conv="using:San11PVPToolClient.Converters"
+             mc:Ignorable="d"
+             x:Class="San11PVPToolClient.Views.RoomView"
+             x:DataType="vm:RoomViewModel"
+             FontFamily="Microsoft YaHei">
+  <UserControl.Resources>
+    <conv:IsEqualConverter x:Key="IsEqualConverter" />
+    <conv:OrConverter x:Key="OrConverter" />
+  </UserControl.Resources>
+
+  <UserControl.Styles>
+    <Style Selector="TextBlock.Label">
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="Margin" Value="6,3,0,0" />
+    </Style>
+    <Style Selector="TextBlock.Display">
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="HorizontalAlignment" Value="Right" />
+      <Setter Property="Margin" Value="3,3,0,0" />
+    </Style>
+
+    <Style Selector="TextBox.Message">
+      <Setter Property="TextWrapping" Value="WrapWithOverflow" />
+      <Setter Property="Margin" Value="3" />
+      <Setter Property="IsReadOnly" Value="True" />
+      <Setter Property="CaretBrush" Value="Transparent" />
+    </Style>
+
+    <Style Selector="TextBox.Entry">
+      <Setter Property="MinHeight" Value="30" />
+      <Setter Property="Height" Value="30" />
+      <Setter Property="Margin" Value="3" />
+    </Style>
+
+    <Style Selector="Button.Tool">
+      <Setter Property="Height" Value="30" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Padding" Value="9,3" />
+      <Setter Property="Margin" Value="3" />
+    </Style>
+
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="auto, *, auto">
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="150" MinWidth="200" />
+      <ColumnDefinition Width="Auto" />
+      <ColumnDefinition Width="*" MinWidth="200" />
+    </Grid.ColumnDefinitions>
+
+    <DockPanel Grid.Row="0" Grid.ColumnSpan="3">
+      <Button Content="退出" Classes="Tool" DockPanel.Dock="Left"
+              Command="{Binding LeaveRoomCommand}" />
+      <Button Content="关闭" Classes="Tool" DockPanel.Dock="Left"
+              IsVisible="{Binding IsRoomOwner}"
+              Command="{Binding CloseRoomCommand}" />
+      <Button Content="房间设置" Classes="Tool"
+              IsVisible="{Binding IsRoomOwner}"
+              Command="{Binding SetRoomConfigCommand}" />
+
+      <Button Content="上传" Classes="Tool" DockPanel.Dock="Right"
+              Command="{Binding UploadSaveCommand}" />
+      <Button Content="下载" Classes="Tool" DockPanel.Dock="Right"
+              Command="{Binding DownloadSaveCommand}" />
+
+      <Panel />
+    </DockPanel>
+
+    <Grid Grid.Row="1" Grid.RowSpan="2" RowDefinitions="auto, *">
+      <StackPanel Orientation="Vertical" HorizontalAlignment="Left"
+                  Grid.Row="0">
+        <TextBlock Text="[个人信息]" Classes="Label" />
+        <StackPanel Orientation="Horizontal">
+          <TextBlock Text="昵称：" Classes="Label" />
+          <TextBlock Text="{Binding UserInfo.NameDisplay}" Classes="Display" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal">
+          <TextBlock Text="[房间信息]" Classes="Label" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal">
+          <TextBlock Text="名称：" Classes="Label" />
+          <TextBlock Text="{Binding RoomInfo.Name}" Classes="Display" />
+          <TextBlock Text="{Binding RoomInfo.ShortId, StringFormat='({0})'}" Classes="Display" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal">
+          <TextBlock Text="成员：" Classes="Label" />
+          <TextBlock Classes="Display" Text="{Binding RoomInfo.PlayerCountDisplay}" />
+        </StackPanel>
+      </StackPanel>
+
+      <Border Grid.Row="1" Margin="3" CornerRadius="3"
+              BorderThickness="1" BorderBrush="Gray" />
+      <ListBox Grid.Row="1" Margin="6"
+               ItemsSource="{Binding RoomInfo.Players}" MinHeight="20">
+        <ListBox.Styles>
+          <Style Selector="ListBox">
+            <Setter Property="Padding" Value="3,3" />
+          </Style>
+
+          <Style Selector="ListBoxItem">
+            <Setter Property="Padding" Value="3" />
+          </Style>
+        </ListBox.Styles>
+        <ListBox.ItemTemplate>
+          <DataTemplate>
+            <DockPanel>
+              <Ellipse DockPanel.Dock="Left" Width="12" Height="12" Margin="6,0,12,0"
+                       Fill="{Binding StateBrush}" Stroke="#808080" StrokeThickness="0.5" />
+
+              <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center"
+                         Text="{Binding KingName}" FontWeight="Medium" Foreground="#758586" />
+
+              <StackPanel VerticalAlignment="Center">
+                <TextBlock Text="{Binding NameDisplay}" FontWeight="Medium" Foreground="#2C3E50" />
+                <TextBlock Text="{Binding RoleDisplay}" FontSize="10" Foreground="#758586" />
+              </StackPanel>
+            </DockPanel>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+
+        <ListBox.ContextMenu>
+          <ContextMenu>
+            <MenuItem Header="设置君主名"
+                      Command="{Binding SetKingNameCommand}"
+                      CommandParameter="{Binding $parent[ListBox].SelectedItem}">
+              <MenuItem.IsEnabled>
+                <MultiBinding Converter="{StaticResource OrConverter}">
+                  <MultiBinding Converter="{StaticResource IsEqualConverter}">
+                    <Binding Path="$parent[ListBox].SelectedItem" />
+                    <Binding Path="UserInfo" />
+                  </MultiBinding>
+                  <Binding Path="IsRoomOwner" />
+                </MultiBinding>
+              </MenuItem.IsEnabled>
+            </MenuItem>
+            <MenuItem Header="转让房主"
+                      Command="{Binding SetOwnerCommand}"
+                      CommandParameter="{Binding $parent[ListBox].SelectedItem}"
+                      IsVisible="{Binding IsRoomOwner}">
+              <MenuItem.IsEnabled>
+                <MultiBinding Converter="{StaticResource IsEqualConverter}"
+                              ConverterParameter="Not">
+                  <Binding Path="$parent[ListBox].SelectedItem" />
+                  <Binding Path="UserInfo" />
+                </MultiBinding>
+              </MenuItem.IsEnabled>
+            </MenuItem>
+            <MenuItem Header="踢出房间"
+                      Command="{Binding KickPlayerCommand}"
+                      CommandParameter="{Binding $parent[ListBox].SelectedItem}"
+                      IsVisible="{Binding IsRoomOwner}">
+              <MenuItem.IsEnabled>
+                <MultiBinding Converter="{StaticResource IsEqualConverter}"
+                              ConverterParameter="Not">
+                  <Binding Path="$parent[ListBox].SelectedItem" />
+                  <Binding Path="UserInfo" />
+                </MultiBinding>
+              </MenuItem.IsEnabled>
+            </MenuItem>
+          </ContextMenu>
+        </ListBox.ContextMenu>
+      </ListBox>
+    </Grid>
+
+    <GridSplitter Grid.Row="0" Grid.Column="1" Grid.RowSpan="3" MinWidth="1" Width="1" Margin="0,6" />
+
+    <Border Grid.Row="1" Grid.Column="2" Margin="3" CornerRadius="3"
+            BorderThickness="1" BorderBrush="Gray" />
+    <ScrollViewer Name="ChatScrollViewer" Grid.Row="1" Grid.Column="2" Margin="6"
+                  VerticalScrollBarVisibility="Auto">
+      <ScrollViewer.ContextMenu>
+        <ContextMenu>
+          <MenuItem Header="清屏" Command="{Binding ClearMessagesCommand}" />
+        </ContextMenu>
+      </ScrollViewer.ContextMenu>
+      <ItemsControl ItemsSource="{Binding Messages}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="m:MessageItem">
+            <Panel>
+              <StackPanel IsVisible="{Binding IsSystemMessage}"
+                          HorizontalAlignment="Center" Margin="5,10">
+                <TextBlock Text="{Binding Message}" Foreground="{Binding MessageForeGround}" FontSize="12"
+                           TextWrapping="WrapWithOverflow" HorizontalAlignment="Center" />
+              </StackPanel>
+
+              <StackPanel IsVisible="{Binding !IsSystemMessage}"
+                          HorizontalAlignment="{Binding DisplayAlignment}" Margin="10,3">
+                <TextBlock Text="{Binding SenderName}" FontSize="10" Foreground="Gray" Margin="2,0" />
+                <Border Background="#E1F5FE" CornerRadius="8" Padding="10,6">
+                  <TextBlock Text="{Binding Message}" TextWrapping="Wrap" MaxWidth="300" />
+                </Border>
+                <TextBlock Text="{Binding Time, StringFormat='HH:mm'}" FontSize="9" Foreground="#BBB" Margin="2,0" />
+              </StackPanel>
+            </Panel>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+
+    <DockPanel Grid.Row="2" Grid.Column="2">
+      <Button Content="发送" Classes="Tool" DockPanel.Dock="Right"
+              Command="{Binding SendMessageCommand}" />
+      <TextBox Text="{Binding InputText}" Classes="Entry"
+               AcceptsReturn="True">
+        <TextBox.KeyBindings>
+          <KeyBinding Gesture="Enter"
+                      Command="{Binding SendMessageCommand}" />
+        </TextBox.KeyBindings>
+      </TextBox>
+    </DockPanel>
+  </Grid>
+</UserControl>
