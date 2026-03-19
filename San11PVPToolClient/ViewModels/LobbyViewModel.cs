@@ -106,6 +106,7 @@ public class LobbyViewModel : ViewModelBase, IRoutableViewModel
         catch (Exception ex)
         {
             await ShowMsgBoxAsync("连接失败", $"{ex.Message}");
+            Rooms.Clear();
         }
     }
 
