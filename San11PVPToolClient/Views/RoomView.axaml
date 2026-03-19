@@ -70,6 +70,8 @@
               Command="{Binding UploadSaveCommand}" />
       <Button Content="下载" Classes="Tool" DockPanel.Dock="Right"
               Command="{Binding DownloadSaveCommand}" />
+      <Button Content="设置" Classes="Tool" DockPanel.Dock="Right"
+              Command="{Binding SettingsCommand}" />
 
       <Panel />
     </DockPanel>

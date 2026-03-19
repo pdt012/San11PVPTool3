@@ -5,6 +5,7 @@ using Avalonia.ReactiveUI;
 using Avalonia.Threading;
 using ReactiveUI;
 using San11PVPToolClient.Dialogs;
+using San11PVPToolClient.Models;
 using San11PVPToolClient.ViewModels;
 using San11PVPToolShared.Models;
 
@@ -28,6 +29,19 @@ public partial class RoomView : ReactiveUserControl<RoomViewModel>
                     ViewModel.Messages.CollectionChanged -= MessagesChanged;
                 }).DisposeWith(disposables);
             }
+            
+            ViewModel!.OpenSettingsInteraction.RegisterHandler(async interaction =>
+            {
+                var dialog = new UserSettingsDialog()
+                {
+                    Title = "设置",
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    ViewModel = new UserSettingsDialogViewModel(interaction.Input)
+                };
+
+                var result = await dialog.ShowDialog<UserSettings?>(TopLevel.GetTopLevel(this) as Window);
+                interaction.SetOutput(result);
+            }).DisposeWith(disposables);
 
             ViewModel!.SetRoomConfigInteraction.RegisterHandler(async interaction =>
             {

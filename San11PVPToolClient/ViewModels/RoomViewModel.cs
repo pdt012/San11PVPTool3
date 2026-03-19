@@ -50,8 +50,9 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
     private CancellationTokenSource _cts;
 
     private DateTime _saveDataMTime;
-    private DispatcherTimer _autoSaveTimer;
+    private DispatcherTimer? _autoSaveTimer;
 
+    public ReactiveCommand<Unit, Unit> SettingsCommand { get; }
     public ReactiveCommand<Unit, Unit> LeaveRoomCommand { get; }
     public ReactiveCommand<Unit, Unit> CloseRoomCommand { get; }
     public ReactiveCommand<Unit, Unit> UploadSaveCommand { get; }
@@ -63,6 +64,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
     public ReactiveCommand<PlayerInfo, Unit> SetOwnerCommand { get; }
     public ReactiveCommand<PlayerInfo, Unit> KickPlayerCommand { get; }
 
+    public Interaction<UserSettings, UserSettings?> OpenSettingsInteraction { get; } = new();
     public Interaction<Unit, RoomConfig?> SetRoomConfigInteraction { get; } = new();
     public Interaction<PlayerInfo, string?> SetKingNameInteraction { get; } = new();
 
@@ -72,6 +74,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
         _client = client;
         _userSettingsService = userSettingsService;
 
+        SettingsCommand = ReactiveCommand.CreateFromTask(OpenSettings);
         LeaveRoomCommand = ReactiveCommand.CreateFromTask(LeaveRoom);
         CloseRoomCommand = ReactiveCommand.CreateFromTask(CloseRoom);
         UploadSaveCommand = ReactiveCommand.CreateFromTask(UploadSave);
@@ -202,16 +205,38 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
             })
             .DisposeWith(disposable);
 
-        _saveDataMTime = DateTime.Now;
-        if (_userSettingsService.Settings.AutoUpload)
+        InitAutoUploadTimer();
+    }
+
+    private void InitAutoUploadTimer()
+    {
+        // 开启了自动上传但timer没有启动
+        if (_userSettingsService.Settings.AutoUpload && (_autoSaveTimer == null || !_autoSaveTimer.IsEnabled))
         {
+            _saveDataMTime = DateTime.Now;
             _autoSaveTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
             _autoSaveTimer.Tick += SaveDataCheckTimer_TickAsync;
             _autoSaveTimer.Start();
             AddSystemMessage("已启动自动上传");
         }
+        // 没开启自动上传但timer已经启动
+        else if (!_userSettingsService.Settings.AutoUpload && (_autoSaveTimer?.IsEnabled ?? false))
+        {
+            _autoSaveTimer.Stop();
+            _autoSaveTimer = null;
+            AddSystemMessage("已停止自动上传");
+        }
     }
-
+    
+    private async Task OpenSettings()
+    {
+        var userSettings = await OpenSettingsInteraction.Handle(_userSettingsService.Settings);
+        if (userSettings is null) return;
+        _userSettingsService.Settings = userSettings;
+        _userSettingsService.Save();
+        InitAutoUploadTimer();  // 自动上传设定可能改变，重新初始化
+    }
+    
     private async Task LeaveRoom()
     {
         try
