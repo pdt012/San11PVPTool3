@@ -49,6 +49,9 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
 
     private CancellationTokenSource _cts;
 
+    private DateTime _saveDataMTime;
+    private DispatcherTimer _autoSaveTimer;
+
     public ReactiveCommand<Unit, Unit> LeaveRoomCommand { get; }
     public ReactiveCommand<Unit, Unit> CloseRoomCommand { get; }
     public ReactiveCommand<Unit, Unit> UploadSaveCommand { get; }
@@ -198,6 +201,15 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
                 _cts.Dispose();
             })
             .DisposeWith(disposable);
+
+        _saveDataMTime = DateTime.Now;
+        if (_userSettingsService.Settings.AutoUpload)
+        {
+            _autoSaveTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+            _autoSaveTimer.Tick += SaveDataCheckTimer_TickAsync;
+            _autoSaveTimer.Start();
+            AddSystemMessage("已启动自动上传");
+        }
     }
 
     private async Task LeaveRoom()
@@ -258,6 +270,9 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
         try
         {
             await _client.DownloadSave(Path.Combine(_userSettingsService.Settings.SaveDataDir, "Save031.s11"));
+            var saveDataPath = Path.Combine(_userSettingsService.Settings.SaveDataDir, "Save031.s11");
+            var mtime = File.GetLastWriteTime(saveDataPath);
+            _saveDataMTime = mtime;  // 避免触发自动上传
         }
         catch (Exception ex)
         {
@@ -322,5 +337,18 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
             Messages.Add(new(message.SenderId, message.SenderName, message.Message, DateTime.Now,
                 DisplayAlignment: message.SenderId == UserInfo?.PlayerId ? "Right" : "Left"));
         });
+    }
+    
+    private async void SaveDataCheckTimer_TickAsync(object? sender, EventArgs e)
+    {
+        var saveDataPath = Path.Combine(_userSettingsService.Settings.SaveDataDir, "Save031.s11");
+        var mtime = File.GetLastWriteTime(saveDataPath);
+        if (mtime > _saveDataMTime)
+        {
+            AddSystemMessage("检测到存档更新");
+            await Task.Delay(TimeSpan.FromMilliseconds(200));  // 等待游戏内存档文件的保存操作完成，避免冲突造成文件发送失败
+            await UploadSave();
+            _saveDataMTime = mtime;
+        }
     }
 }

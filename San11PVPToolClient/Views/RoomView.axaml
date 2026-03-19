@@ -188,7 +188,7 @@
           <DataTemplate x:DataType="m:MessageItem">
             <Panel>
               <StackPanel IsVisible="{Binding IsSystemMessage}"
-                          HorizontalAlignment="Center" Margin="5,10">
+                          HorizontalAlignment="Center" Margin="5,6">
                 <TextBlock Text="{Binding Message}" Foreground="{Binding MessageForeGround}" FontSize="12"
                            TextWrapping="WrapWithOverflow" HorizontalAlignment="Center" />
               </StackPanel>
