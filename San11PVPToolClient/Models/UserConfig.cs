@@ -5,5 +5,6 @@ public record UserConfig(
     string ServerAddress = "",
     string SaveDataDir = "",
     bool AutoUpload = false,
-    bool AutoDownload = false
+    bool AutoDownload = false,
+    int XOffset = 0  // 屏幕x方向偏移修正
 );

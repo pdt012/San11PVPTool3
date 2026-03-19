@@ -45,6 +45,7 @@ public partial class LobbyView : ReactiveUserControl<LobbyViewModel>
             ViewModel!.ShowMsgBoxInteraction.RegisterHandler(async interaction =>
             {
                 var boxParams = interaction.Input;
+                boxParams.Topmost = true;
                 var box = MessageBoxManager.GetMessageBoxStandard(boxParams);
 
                 await box.ShowWindowDialogAsync(TopLevel.GetTopLevel(this) as Window);

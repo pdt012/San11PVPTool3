@@ -12,7 +12,8 @@
         Width="500" Height="300"
         Icon="/Assets/pvpTool.ico"
         Title="{x:Static services:AppInfo.AppTitle}"
-        FontFamily="Microsoft YaHei">
+        FontFamily="Microsoft YaHei"
+        Topmost="True">
 
   <Design.DataContext>
     <vm:MainViewModel />
