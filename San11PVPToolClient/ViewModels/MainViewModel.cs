@@ -10,14 +10,14 @@ public class MainViewModel : ViewModelBase, IScreen
 
     public OnlineService Client { get; }
 
-    public UserConfigService UserConfigService { get; }
+    public UserSettingsService UserSettingsService { get; }
 
     public MainViewModel()
     {
-        UserConfigService = new UserConfigService();
+        UserSettingsService = new UserSettingsService();
 
-        Client = new OnlineService(UserConfigService.Config.ServerAddress);
+        Client = new OnlineService();
 
-        Router.Navigate.Execute(new LobbyViewModel(this, Client, UserConfigService)).Subscribe();
+        Router.Navigate.Execute(new LobbyViewModel(this, Client, UserSettingsService)).Subscribe();
     }
 }

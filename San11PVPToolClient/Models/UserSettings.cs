@@ -1,8 +1,6 @@
 ﻿namespace San11PVPToolClient.Models;
 
-public record UserConfig(
-    string UserName = "",
-    string ServerAddress = "",
+public record UserSettings(
     string SaveDataDir = "",
     bool AutoUpload = false,
     bool AutoDownload = false,

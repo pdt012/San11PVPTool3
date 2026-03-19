@@ -20,7 +20,7 @@ public partial class MainWindow : ReactiveWindow<MainViewModel>
 
     private CancellationTokenSource? _animationCts;
 
-    private int XOffset => ViewModel?.UserConfigService.Config.XOffset ?? 0;
+    private int XOffset => ViewModel?.UserSettingsService.Settings.XOffset ?? 0;
 
     public MainWindow()
     {

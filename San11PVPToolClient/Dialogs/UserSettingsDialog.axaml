@@ -1,0 +1,60 @@
+﻿<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="using:San11PVPToolClient.Dialogs"
+        mc:Ignorable="d"
+        SizeToContent="WidthAndHeight"
+        x:Class="San11PVPToolClient.Dialogs.UserSettingsDialog"
+        x:DataType="local:UserSettingsDialogViewModel"
+        Title="设置">
+  <Window.Styles>
+    <Style Selector="TextBlock.Label">
+      <Setter Property="VerticalAlignment" Value="Bottom" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="Margin" Value="6,6,0,0" />
+    </Style>
+
+    <Style Selector="TextBox.Entry">
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="Margin" Value="3" />
+    </Style>
+
+    <Style Selector="CheckBox.Entry">
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="Margin" Value="6,3" />
+    </Style>
+
+    <Style Selector="NumericUpDown.Entry">
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="Margin" Value="3" />
+    </Style>
+  </Window.Styles>
+
+  <StackPanel Margin="50,10" HorizontalAlignment="Center">
+    <TextBlock Text="存档位置" Classes="Label" />
+    <StackPanel Orientation="Horizontal">
+      <TextBox Text="{Binding SaveDataDir}"
+               Classes="Entry" IsReadOnly="True" Width="200" />
+      <Button Content="浏览" Click="SelectSaveDataDir_OnClick"/>
+    </StackPanel>
+
+    <StackPanel Orientation="Horizontal">
+      <CheckBox Content="自动上传" IsChecked="{Binding AutoUpload}"
+                Classes="Entry" />
+      <CheckBox Content="自动下载" IsChecked="{Binding AutoDownload}"
+                Classes="Entry" />
+    </StackPanel>
+    
+    <TextBlock Text="X偏移修正" Classes="Label" />
+    <NumericUpDown Value="{Binding XOffset}"
+                   Minimum="-20" Maximum="20"
+                   Classes="Entry" Width="200" />
+    
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+      <Button Content="确认" Click="ButtonConfirm_Click" Margin="10" />
+      <Button Content="取消" Click="ButtonClose_Click" Margin="10" />
+    </StackPanel>
+  </StackPanel>
+</Window>
+

@@ -45,7 +45,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
 
 
     private readonly OnlineService _client;
-    private readonly UserConfigService _userConfigService;
+    private readonly UserSettingsService _userSettingsService;
 
     private CancellationTokenSource _cts;
 
@@ -63,11 +63,11 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
     public Interaction<Unit, RoomConfig?> SetRoomConfigInteraction { get; } = new();
     public Interaction<PlayerInfo, string?> SetKingNameInteraction { get; } = new();
 
-    public RoomViewModel(IScreen screen, OnlineService client, UserConfigService userConfigService)
+    public RoomViewModel(IScreen screen, OnlineService client, UserSettingsService userSettingsService)
     {
         HostScreen = screen;
         _client = client;
-        _userConfigService = userConfigService;
+        _userSettingsService = userSettingsService;
 
         LeaveRoomCommand = ReactiveCommand.CreateFromTask(LeaveRoom);
         CloseRoomCommand = ReactiveCommand.CreateFromTask(CloseRoom);
@@ -229,7 +229,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
     {
         try
         {
-            string baseSavePath = Path.Combine(_userConfigService.Config.SaveDataDir, "Save031.s11");
+            string baseSavePath = Path.Combine(_userSettingsService.Settings.SaveDataDir, "Save031.s11");
             if (!File.Exists(baseSavePath))
             {
                 AddSystemMessage($"存档不存在：\"{baseSavePath}\"", MessageLevel.Error);
@@ -257,7 +257,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
     {
         try
         {
-            await _client.DownloadSave(Path.Combine(_userConfigService.Config.SaveDataDir, "Save031.s11"));
+            await _client.DownloadSave(Path.Combine(_userSettingsService.Settings.SaveDataDir, "Save031.s11"));
         }
         catch (Exception ex)
         {

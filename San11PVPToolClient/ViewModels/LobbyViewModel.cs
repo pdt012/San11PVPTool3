@@ -12,6 +12,7 @@ using DynamicData;
 using MsBox.Avalonia.Dto;
 using MsBox.Avalonia.Enums;
 using ReactiveUI;
+using San11PVPToolClient.Models;
 using San11PVPToolClient.Services;
 using San11PVPToolShared.Models;
 
@@ -24,7 +25,7 @@ public class LobbyViewModel : ViewModelBase, IRoutableViewModel
 
     private readonly OnlineService _client;
 
-    private readonly UserConfigService _userConfigService;
+    private readonly UserSettingsService _userSettingsService;
 
     private CancellationTokenSource _cts;
 
@@ -32,22 +33,25 @@ public class LobbyViewModel : ViewModelBase, IRoutableViewModel
 
     public ReactiveCommand<Unit, Unit> SettingsCommand { get; }
     public ReactiveCommand<Unit, Unit> AboutCommand { get; }
+    public ReactiveCommand<Unit, Unit> NetworkConfigCommand { get; }
     public ReactiveCommand<Unit, Unit> GetRoomListCommand { get; }
     public ReactiveCommand<Unit, Unit> CreateRoomCommand { get; }
     public ReactiveCommand<RoomInfoSummary, Unit> JoinRoomCommand { get; }
 
+    public Interaction<UserSettings, UserSettings?> OpenSettingsInteraction { get; } = new();
     public Interaction<Unit, RoomConfig?> SetRoomConfigInteraction { get; } = new();
     public Interaction<Unit, string?> InputPasswordInteraction { get; } = new();
     public Interaction<MessageBoxStandardParams, Unit> ShowMsgBoxInteraction { get; } = new();
 
-    public LobbyViewModel(IScreen screen, OnlineService client, UserConfigService userConfigService)
+    public LobbyViewModel(IScreen screen, OnlineService client, UserSettingsService userSettingsService)
     {
         HostScreen = screen;
         _client = client;
-        _userConfigService = userConfigService;
+        _userSettingsService = userSettingsService;
 
         SettingsCommand = ReactiveCommand.CreateFromTask(OpenSettings);
         AboutCommand = ReactiveCommand.CreateFromTask(OpenAbout);
+        NetworkConfigCommand = ReactiveCommand.CreateFromTask(OpenNetworkConfig);
         GetRoomListCommand = ReactiveCommand.CreateFromTask(GetRoomList);
         CreateRoomCommand = ReactiveCommand.CreateFromTask(CreateRoom);
         JoinRoomCommand = ReactiveCommand.CreateFromTask<RoomInfoSummary>(JoinRoom);
@@ -55,7 +59,7 @@ public class LobbyViewModel : ViewModelBase, IRoutableViewModel
 
     protected override void DoWhenActivated(CompositeDisposable disposable)
     {
-        _client.ServerUrl = _userConfigService.Config.ServerAddress;
+        _client.ServerUrl = _client.NetworkConfig.ServerAddress;
 
         _cts = new CancellationTokenSource();
         // 当 deactivate 时自动取消
@@ -74,12 +78,20 @@ public class LobbyViewModel : ViewModelBase, IRoutableViewModel
 
     private async Task OpenSettings()
     {
-        await HostScreen.Router.Navigate.Execute(new SettingsViewModel(HostScreen, _userConfigService));
+        var userSettings = await OpenSettingsInteraction.Handle(_userSettingsService.Settings);
+        if (userSettings is null) return;
+        _userSettingsService.Settings = userSettings;
+        _userSettingsService.Save();
     }
 
     private async Task OpenAbout()
     {
         await HostScreen.Router.Navigate.Execute(new AboutViewModel(HostScreen));
+    }
+
+    private async Task OpenNetworkConfig()
+    {
+        await HostScreen.Router.Navigate.Execute(new NetworkConfigViewModel(HostScreen, _client));
     }
 
     private async Task GetRoomList()
@@ -105,10 +117,10 @@ public class LobbyViewModel : ViewModelBase, IRoutableViewModel
         try
         {
             (bool success, string message) =
-                await _client.CreateRoom(_userConfigService.Config.UserName, roomConfig, _cts.Token);
+                await _client.CreateRoom(_client.NetworkConfig.UserName, roomConfig, _cts.Token);
             if (success)
             {
-                await HostScreen.Router.Navigate.Execute(new RoomViewModel(HostScreen, _client, _userConfigService));
+                await HostScreen.Router.Navigate.Execute(new RoomViewModel(HostScreen, _client, _userSettingsService));
             }
             else
             {
@@ -138,10 +150,10 @@ public class LobbyViewModel : ViewModelBase, IRoutableViewModel
         try
         {
             (bool success, string message) =
-                await _client.JoinRoom(_userConfigService.Config.UserName, room.RoomId, password, _cts.Token);
+                await _client.JoinRoom(_client.NetworkConfig.UserName, room.RoomId, password, _cts.Token);
             if (success)
             {
-                await HostScreen.Router.Navigate.Execute(new RoomViewModel(HostScreen, _client, _userConfigService));
+                await HostScreen.Router.Navigate.Execute(new RoomViewModel(HostScreen, _client, _userSettingsService));
             }
             else
             {

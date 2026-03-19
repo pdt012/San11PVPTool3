@@ -24,18 +24,23 @@
               Command="{Binding CreateRoomCommand}"
               Margin="5,0" />
 
-      <Button DockPanel.Dock="Right"
-              Content="设置"
-              Command="{Binding SettingsCommand}"
-              Margin="5,0" />
-
-      <Button DockPanel.Dock="Right"
-              Content="关于联机工具"
-              Command="{Binding AboutCommand}"
+      <Button DockPanel.Dock="Left"
+              Content="配置连接"
+              Command="{Binding NetworkConfigCommand}"
               Margin="5,0" />
 
       <Panel />
     </DockPanel>
+    
+    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
+                HorizontalAlignment="Right" Margin="5">
+      <Button Content="关于联机工具"
+              Command="{Binding AboutCommand}"
+              Margin="5,0" />
+      <Button Content="设置"
+              Command="{Binding SettingsCommand}"
+              Margin="5,0" />
+    </StackPanel>
 
     <!-- 房间列表 -->
     <DataGrid ItemsSource="{Binding Rooms}"

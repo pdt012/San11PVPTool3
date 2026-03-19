@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using San11PVPToolClient.Events;
+using San11PVPToolClient.Models;
 using San11PVPToolClient.Networking;
 using San11PVPToolShared.Events;
 using San11PVPToolShared.Models;
@@ -55,9 +57,43 @@ public class OnlineService
     private string? _roomId;
     private string? _playerId;
 
-    public OnlineService(string serverUrl)
+
+    #region NetworkConfig
+
+    public const string NetworkConfigFileName = "NetworkConfig.json";
+    
+    public NetworkConfig NetworkConfig
     {
-        ServerUrl = serverUrl;
+        get;
+        set
+        {
+            field = value;
+            Save();
+        }
+    }
+
+    public void Save()
+    {
+        string json = JsonSerializer.Serialize(NetworkConfig);
+        File.WriteAllText(NetworkConfigFileName, json);
+    }
+
+    private NetworkConfig Load()
+    {
+        if (!File.Exists(NetworkConfigFileName))
+            return new NetworkConfig();
+
+        string json = File.ReadAllText(NetworkConfigFileName);
+        return JsonSerializer.Deserialize<NetworkConfig>(json)!;
+    }
+
+    #endregion
+
+    public OnlineService()
+    {
+        NetworkConfig = Load();
+        
+        ServerUrl = NetworkConfig.ServerAddress;
 
         SocketClient = new WebSocketClient(Events);
     }

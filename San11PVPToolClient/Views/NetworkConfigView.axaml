@@ -4,8 +4,8 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="clr-namespace:San11PVPToolClient.ViewModels"
              mc:Ignorable="d" d:DesignWidth="400" d:DesignHeight="250"
-             x:Class="San11PVPToolClient.Views.SettingsView"
-             x:DataType="vm:SettingsViewModel">
+             x:Class="San11PVPToolClient.Views.NetworkConfigView"
+             x:DataType="vm:NetworkConfigViewModel">
   <UserControl.Styles>
     <Style Selector="TextBlock.Label">
       <Setter Property="VerticalAlignment" Value="Bottom" />
@@ -43,20 +43,6 @@
       <TextBlock Text="服务端地址" Classes="Label" />
       <TextBox Text="{Binding ServerAddress}"
                Classes="Entry" Width="200" />
-
-      <TextBlock Text="存档位置" Classes="Label" />
-      <StackPanel Orientation="Horizontal">
-        <TextBox Text="{Binding SaveDataDir}"
-                 Classes="Entry" IsReadOnly="True" Width="200" />
-        <Button Content="浏览" Command="{Binding SelectSaveDataDirCommand}" />
-      </StackPanel>
-
-      <StackPanel Orientation="Horizontal">
-        <CheckBox Content="自动上传" IsChecked="{Binding AutoUpload}"
-                  Classes="Entry" />
-        <CheckBox Content="自动下载" IsChecked="{Binding AutoDownload}"
-                  Classes="Entry" />
-      </StackPanel>
 
     </StackPanel>
   </Panel>

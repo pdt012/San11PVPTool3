@@ -5,6 +5,7 @@ using Avalonia.ReactiveUI;
 using MsBox.Avalonia;
 using ReactiveUI;
 using San11PVPToolClient.Dialogs;
+using San11PVPToolClient.Models;
 using San11PVPToolClient.ViewModels;
 using San11PVPToolShared.Models;
 
@@ -51,6 +52,19 @@ public partial class LobbyView : ReactiveUserControl<LobbyViewModel>
                 await box.ShowWindowDialogAsync(TopLevel.GetTopLevel(this) as Window);
 
                 interaction.SetOutput(Unit.Default);
+            }).DisposeWith(disposables);
+            
+            ViewModel!.OpenSettingsInteraction.RegisterHandler(async interaction =>
+            {
+                var dialog = new UserSettingsDialog()
+                {
+                    Title = "设置",
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    ViewModel = new UserSettingsDialogViewModel(interaction.Input)
+                };
+
+                var result = await dialog.ShowDialog<UserSettings?>(TopLevel.GetTopLevel(this) as Window);
+                interaction.SetOutput(result);
             }).DisposeWith(disposables);
         });
     }
