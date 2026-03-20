@@ -8,7 +8,11 @@ using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia.Controls;
+using Avalonia.Platform;
 using Avalonia.Threading;
+using MsBox.Avalonia.Dto;
+using MsBox.Avalonia.Enums;
 using ReactiveUI;
 using San11PVPToolClient.Models;
 using San11PVPToolClient.Services;
@@ -78,6 +82,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
     public ReactiveCommand<PlayerInfo, Unit> SetOwnerCommand { get; }
     public ReactiveCommand<PlayerInfo, Unit> KickPlayerCommand { get; }
 
+    public Interaction<MessageBoxStandardParams, Unit> ShowMsgBoxInteraction { get; } = new();
     public Interaction<UserSettings, UserSettings?> OpenSettingsInteraction { get; } = new();
     public Interaction<Unit, RoomConfig?> SetRoomConfigInteraction { get; } = new();
     public Interaction<PlayerInfo, string?> SetKingNameInteraction { get; } = new();
@@ -195,7 +200,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
             .DisposeWith(disposable);
 
         _client.Events.SaveUploaded
-            .Subscribe(eventData =>
+            .Subscribe(async eventData =>
             {
                 var player = eventData.Player;
                 SaveDataSummary = eventData.SaveDataSummary;
@@ -207,11 +212,22 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
                 else
                 {
                     AddSystemMessage($"{player.Name}上传了存档");
-                    if (_userSettingsService.Settings.AutoDownload && SaveDataSummary != null &&
-                        SaveDataSummary.CurrentKingName == UserInfo?.KingName)
+                    if (SaveDataSummary != null && SaveDataSummary.CurrentKingName == UserInfo?.KingName)
                     {
-                        AddSystemMessage("自动下载存档");
-                        _ = DownloadSave();
+                        if (_userSettingsService.Settings.AutoDownload)
+                        {
+                            AddSystemMessage("自动下载存档");
+                            await DownloadSave();
+                            await ShowMsgBoxAsync("你的回合",
+                                "轮到你的回合了，请载入31号存档继续游戏！",
+                                location: WindowStartupLocation.CenterScreen);
+                        }
+                        else
+                        {
+                            await ShowMsgBoxAsync("你的回合",
+                                "轮到你的回合了，请下载存档后载入31号存档继续游戏！",
+                                location: WindowStartupLocation.CenterScreen);
+                        }
                     }
                 }
             })
@@ -403,6 +419,22 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
             Messages.Add(new(message.SenderId, message.SenderName, message.Message, DateTime.Now,
                 DisplayAlignment: message.SenderId == UserInfo?.PlayerId ? "Right" : "Left"));
         });
+    }
+
+    private async Task ShowMsgBoxAsync(string title, string message, Icon icon = Icon.Info,
+        ButtonEnum button = ButtonEnum.Ok, WindowStartupLocation location = WindowStartupLocation.CenterOwner)
+    {
+        await using var stream = AssetLoader.Open(new Uri("avares://San11PVPToolClient/Assets/pvpTool.ico"));
+        var boxParams = new MessageBoxStandardParams
+        {
+            WindowIcon = new WindowIcon(stream),
+            ContentTitle = title,
+            ContentMessage = message,
+            Icon = icon,
+            ButtonDefinitions = button,
+            WindowStartupLocation = location
+        };
+        await ShowMsgBoxInteraction.Handle(boxParams);
     }
 
     private async void SaveDataCheckTimer_TickAsync(object? sender, EventArgs e)
