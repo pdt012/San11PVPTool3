@@ -156,6 +156,9 @@ public class RoomController : ControllerBase
             socket?.CloseAsync(WebSocketCloseStatus.NormalClosure, "Disconnected by server", CancellationToken.None);
             // 清除该用户
             RoomManager.RemovePlayer(req.RoomId, req.TargetPlayerId);
+            // 更新房间信息
+            _ = RoomEventDispatcher.SendToRoom(req.RoomId, EventTypes.RoomInfoUpdated,
+                new RoomInfoUpdatedEventData(RoomManager.GetRoomInfo(req.RoomId)));
 
             return Task.FromResult(Ok());
         });
