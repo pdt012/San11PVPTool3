@@ -52,7 +52,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
         get;
         set => this.RaiseAndSetIfChanged(ref field, value);
     } = false;
-    
+
     public ObservableCollection<MessageItem> Messages { get; } = new();
 
 
@@ -62,7 +62,9 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
     private CancellationTokenSource _cts;
 
     private DateTime _saveDataMTime;
-    private DispatcherTimer? _autoSaveTimer;
+    private DispatcherTimer? _saveDataCheckTimer;
+
+    private readonly SemaphoreSlim _autoUploadSemaphore = new SemaphoreSlim(1, 1);
 
     public ReactiveCommand<Unit, Unit> SettingsCommand { get; }
     public ReactiveCommand<Unit, Unit> LeaveRoomCommand { get; }
@@ -244,19 +246,20 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
     private void InitAutoUploadTimer()
     {
         // 开启了自动上传但timer没有启动
-        if (_userSettingsService.Settings.AutoUpload && (_autoSaveTimer == null || !_autoSaveTimer.IsEnabled))
+        if (_userSettingsService.Settings.AutoUpload && (_saveDataCheckTimer == null || !_saveDataCheckTimer.IsEnabled))
         {
             _saveDataMTime = DateTime.Now;
-            _autoSaveTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
-            _autoSaveTimer.Tick += SaveDataCheckTimer_TickAsync;
-            _autoSaveTimer.Start();
+            _saveDataCheckTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+            _saveDataCheckTimer.Tick += SaveDataCheckTimer_TickAsync;
+            _saveDataCheckTimer.Start();
             AddSystemMessage("已启动自动上传");
         }
         // 没开启自动上传但timer已经启动
-        else if (!_userSettingsService.Settings.AutoUpload && (_autoSaveTimer?.IsEnabled ?? false))
+        else if (!_userSettingsService.Settings.AutoUpload && (_saveDataCheckTimer?.IsEnabled ?? false))
         {
-            _autoSaveTimer.Stop();
-            _autoSaveTimer = null;
+            _saveDataCheckTimer.Stop();
+            _saveDataCheckTimer.Tick -= SaveDataCheckTimer_TickAsync;
+            _saveDataCheckTimer = null;
             AddSystemMessage("已停止自动上传");
         }
     }
@@ -325,6 +328,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
 
     private async Task DownloadSave()
     {
+        await _autoUploadSemaphore.WaitAsync();
         try
         {
             await _client.DownloadSave(Path.Combine(_userSettingsService.Settings.SaveDataDir, "Save031.s11"));
@@ -335,6 +339,10 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
         catch (Exception ex)
         {
             AddSystemMessage($"下载失败：{ex.Message}", MessageLevel.Error);
+        }
+        finally
+        {
+            _autoUploadSemaphore.Release();
         }
     }
 
@@ -399,21 +407,31 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
 
     private async void SaveDataCheckTimer_TickAsync(object? sender, EventArgs e)
     {
-        var saveDataPath = Path.Combine(_userSettingsService.Settings.SaveDataDir, "Save031.s11");
+        if (!await _autoUploadSemaphore.WaitAsync(0))
+            return;
+
         try
         {
-            // 能够独占文件，确保存档不是正在写入中
-            using var stream = File.Open(saveDataPath, FileMode.Open, FileAccess.Read, FileShare.None);
-        }
-        catch { return; }
+            var saveDataPath = Path.Combine(_userSettingsService.Settings.SaveDataDir, "Save031.s11");
+            try
+            {
+                // 能够独占文件，确保存档不是正在写入中
+                using var stream = File.Open(saveDataPath, FileMode.Open, FileAccess.Read, FileShare.None);
+            }
+            catch { return; }
 
-        var mtime = File.GetLastWriteTime(saveDataPath);
-        if (mtime > _saveDataMTime)
+            var mtime = File.GetLastWriteTime(saveDataPath);
+            if (mtime > _saveDataMTime)
+            {
+                _saveDataMTime = mtime;
+                AddSystemMessage("检测到存档更新");
+                await Task.Delay(TimeSpan.FromMilliseconds(200)); // 等待游戏内存档文件的保存操作完成，避免冲突造成文件发送失败
+                await UploadSave();
+            }
+        }
+        finally
         {
-            _saveDataMTime = mtime;
-            AddSystemMessage("检测到存档更新");
-            await Task.Delay(TimeSpan.FromMilliseconds(200)); // 等待游戏内存档文件的保存操作完成，避免冲突造成文件发送失败
-            await UploadSave();
+            _autoUploadSemaphore.Release();
         }
     }
 }
