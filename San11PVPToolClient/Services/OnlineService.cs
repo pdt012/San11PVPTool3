@@ -200,11 +200,18 @@ public class OnlineService
         if (_roomId == null || _playerId == null) return;
 
         var files = await Api.GetSaveListAsync(_playerId, _roomId, Path.GetFileName(filePath));
-
+        // 先下载到临时文件
         foreach (var filename in files)
         {
-            await Api.DownloadSaveAsync(_playerId, _roomId, filename,
-                Path.ChangeExtension(filePath, Path.GetExtension(filename)));
+            var tempPath = Path.ChangeExtension(filePath, Path.GetExtension(filename)) + ".tmp";
+            await Api.DownloadSaveAsync(_playerId, _roomId, filename, tempPath);
+        }
+        // 统一重命名
+        foreach (var filename in files)
+        {
+            var targetPath = Path.ChangeExtension(filePath, Path.GetExtension(filename));
+            var tempPath = targetPath + ".tmp";
+            File.Move(tempPath, targetPath, true);
         }
     }
 

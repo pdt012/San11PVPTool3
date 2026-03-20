@@ -12,8 +12,7 @@ public record RoomInfoUpdatedEventData(
 
 public record SaveUploadedEventData(
     PlayerInfo Player,
-    int CurrentKingId,
-    string CurrentKingName
+    SaveDataSummary? SaveDataSummary
 );
 
 public record SystemMessageEventData(

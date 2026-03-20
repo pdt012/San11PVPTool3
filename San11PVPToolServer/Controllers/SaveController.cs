@@ -1,10 +1,10 @@
-﻿using System.Text;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using NLog;
 using San11PVPToolServer.ServerWebSocket;
 using San11PVPToolServer.Services;
 using San11PVPToolShared.Events;
 using San11PVPToolShared.Models;
+using San11PVPToolShared.Utils;
 
 namespace San11PVPToolServer.Controllers;
 
@@ -49,43 +49,20 @@ public class SaveController : ControllerBase
             }
 
             // 分析存档
-            string kingName = "";
-            sbyte kingId = -1;
+            SaveDataSummary? saveDataSummary = null;
             try
             {
-                await using var fs = new FileStream(
-                    SaveManager.GetSavePath(roomId, SaveManager.DefaultFileName),
-                    FileMode.Open, FileAccess.Read);
-                byte[] headData = new byte[0x64];
-                int bytesRead = fs.Read(headData, 0, headData.Length);
-
-                if (bytesRead >= 0x64) // 确保读取长度足够
-                {
-                    byte[] nameData = new byte[0x63 - 0x5A];
-                    Array.Copy(headData, 0x5A, nameData, 0, nameData.Length);
-
-                    byte idData = headData[0x63];
-                    kingId = (sbyte)idData;
-
-                    try
-                    {
-                        Encoding big5 = Encoding.GetEncoding("big5");
-                        kingName = big5.GetString(nameData);
-                    }
-                    catch (DecoderFallbackException)
-                    {
-                        kingName = "【pk2.2】";
-                    }
-                }
+                saveDataSummary = SaveDataParser.LoadSaveDataHeader(
+                    SaveManager.GetSavePath(roomId, SaveManager.DefaultFileName));
             }
-            catch (IOException)
+            catch (Exception ex)
             {
-                kingName = "";
+                s_logger.Error(ex, "Failed to load save data");
             }
 
-            s_logger.Info($"{player.Name}上传存档.(君主:{kingName})");
+            s_logger.Info($"{player.Name}上传存档.(君主:{saveDataSummary?.CurrentKingName ?? "??"})");
             _ = RoomEventDispatcher.SendToRoom(roomId, EventTypes.SaveUploaded,
-                new SaveUploadedEventData(player.ToDTO(), kingId, kingName));
+                new SaveUploadedEventData(player.ToDTO(), saveDataSummary));
         }
         finally
         {

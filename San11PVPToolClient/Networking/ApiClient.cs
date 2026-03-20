@@ -140,6 +140,14 @@ public class ApiClient
         return list ?? new List<string>();
     }
 
+    /// <summary>
+    ///  下载指定文件
+    /// </summary>
+    /// <param name="playerId"></param>
+    /// <param name="roomId"></param>
+    /// <param name="filename">请求的文件名</param>
+    /// <param name="savePath">保存的文件路径</param>
+    /// <exception cref="Exception"></exception>
     public async Task DownloadSaveAsync(string playerId, string roomId, string filename, string savePath)
     {
         var res = await _http.GetAsync(

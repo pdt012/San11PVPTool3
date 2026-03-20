@@ -35,6 +35,12 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
         set => this.RaiseAndSetIfChanged(ref field, value);
     }
 
+    public SaveDataSummary? SaveDataSummary
+    {
+        get;
+        set => this.RaiseAndSetIfChanged(ref field, value);
+    }
+
     public string InputText
     {
         get;
@@ -124,6 +130,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
                         {
                             // ignored
                         }
+
                         await Task.Delay(3000);
                     }
                 }
@@ -171,6 +178,8 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
             .Subscribe(eventData =>
             {
                 var player = eventData.Player;
+                SaveDataSummary = eventData.SaveDataSummary;
+
                 if (player.PlayerId == UserInfo?.PlayerId)
                 {
                     AddSystemMessage("存档上传成功");
@@ -178,6 +187,12 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
                 else
                 {
                     AddSystemMessage($"{player.Name}上传了存档");
+                    if (_userSettingsService.Settings.AutoDownload && SaveDataSummary != null &&
+                        SaveDataSummary.CurrentKingName == UserInfo?.KingName)
+                    {
+                        AddSystemMessage("自动下载存档");
+                        _ = DownloadSave();
+                    }
                 }
             })
             .DisposeWith(disposable);
@@ -227,16 +242,16 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
             AddSystemMessage("已停止自动上传");
         }
     }
-    
+
     private async Task OpenSettings()
     {
         var userSettings = await OpenSettingsInteraction.Handle(_userSettingsService.Settings);
         if (userSettings is null) return;
         _userSettingsService.Settings = userSettings;
         _userSettingsService.Save();
-        InitAutoUploadTimer();  // 自动上传设定可能改变，重新初始化
+        InitAutoUploadTimer(); // 自动上传设定可能改变，重新初始化
     }
-    
+
     private async Task LeaveRoom()
     {
         try
@@ -297,7 +312,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
             await _client.DownloadSave(Path.Combine(_userSettingsService.Settings.SaveDataDir, "Save031.s11"));
             var saveDataPath = Path.Combine(_userSettingsService.Settings.SaveDataDir, "Save031.s11");
             var mtime = File.GetLastWriteTime(saveDataPath);
-            _saveDataMTime = mtime;  // 避免触发自动上传
+            _saveDataMTime = mtime; // 避免触发自动上传
         }
         catch (Exception ex)
         {
@@ -363,17 +378,24 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
                 DisplayAlignment: message.SenderId == UserInfo?.PlayerId ? "Right" : "Left"));
         });
     }
-    
+
     private async void SaveDataCheckTimer_TickAsync(object? sender, EventArgs e)
     {
         var saveDataPath = Path.Combine(_userSettingsService.Settings.SaveDataDir, "Save031.s11");
+        try
+        {
+            // 能够独占文件，确保存档不是正在写入中
+            using var stream = File.Open(saveDataPath, FileMode.Open, FileAccess.Read, FileShare.None);
+        }
+        catch { return; }
+
         var mtime = File.GetLastWriteTime(saveDataPath);
         if (mtime > _saveDataMTime)
         {
-            AddSystemMessage("检测到存档更新");
-            await Task.Delay(TimeSpan.FromMilliseconds(200));  // 等待游戏内存档文件的保存操作完成，避免冲突造成文件发送失败
-            await UploadSave();
             _saveDataMTime = mtime;
+            AddSystemMessage("检测到存档更新");
+            await Task.Delay(TimeSpan.FromMilliseconds(200)); // 等待游戏内存档文件的保存操作完成，避免冲突造成文件发送失败
+            await UploadSave();
         }
     }
 }

@@ -4,6 +4,7 @@ using NLog.Config;
 using NLog.Targets;
 using San11PVPToolServer.ServerWebSocket;
 using San11PVPToolServer.Services;
+using San11PVPToolShared.Utils;
 using LogLevel = NLog.LogLevel;
 
 namespace San11PVPToolServer;
@@ -42,6 +43,14 @@ public class Program
 
         // 加载编码
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        try
+        {
+            PK22CodeConverter.Init("enc_3.xml");
+        }
+        catch (Exception ex)
+        {
+            s_logger.Warn($"PK2.2码表初始化失败. {ex}");
+        }
 
         // 注册循环检查
         RegisterLoops(app);

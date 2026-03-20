@@ -7,8 +7,7 @@
              xmlns:conv="using:San11PVPToolClient.Converters"
              mc:Ignorable="d"
              x:Class="San11PVPToolClient.Views.RoomView"
-             x:DataType="vm:RoomViewModel"
-             FontFamily="Microsoft YaHei">
+             x:DataType="vm:RoomViewModel">
   <UserControl.Resources>
     <conv:IsEqualConverter x:Key="IsEqualConverter" />
     <conv:OrConverter x:Key="OrConverter" />
@@ -92,6 +91,11 @@
           <TextBlock Text="名称：" Classes="Label" />
           <TextBlock Text="{Binding RoomInfo.Name}" Classes="Display" />
           <TextBlock Text="{Binding RoomInfo.ShortId, StringFormat='({0})'}" Classes="Display" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal">
+          <TextBlock Text="当前行动君主：" Classes="Label" />
+          <TextBlock Classes="Display" Text="{Binding SaveDataSummary.CurrentKingName}" />
         </StackPanel>
 
         <StackPanel Orientation="Horizontal">
