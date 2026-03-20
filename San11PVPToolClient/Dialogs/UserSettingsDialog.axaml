@@ -52,8 +52,8 @@
                    Classes="Entry" Width="200" />
     
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-      <Button Content="确认" Click="ButtonConfirm_Click" Margin="10" />
-      <Button Content="取消" Click="ButtonClose_Click" Margin="10" />
+      <Button Content="确认" IsDefault="True" Click="ButtonConfirm_Click" Margin="10" />
+      <Button Content="取消" IsCancel="True" Click="ButtonClose_Click" Margin="10" />
     </StackPanel>
   </StackPanel>
 </Window>
