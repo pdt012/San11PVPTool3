@@ -47,6 +47,12 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
         set => this.RaiseAndSetIfChanged(ref field, value);
     } = "";
 
+    private bool IsOnline
+    {
+        get;
+        set => this.RaiseAndSetIfChanged(ref field, value);
+    } = false;
+    
     public ObservableCollection<MessageItem> Messages { get; } = new();
 
 
@@ -80,17 +86,26 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
         _client = client;
         _userSettingsService = userSettingsService;
 
+        var isOnline = this.WhenAnyValue(x => x.IsOnline)
+            .Select(x => x);
+
+        var canSend = this.WhenAnyValue(
+            x => x.InputText,
+            x => x.IsOnline,
+            (text, online) => !string.IsNullOrWhiteSpace(text) && online
+        );
+
         SettingsCommand = ReactiveCommand.CreateFromTask(OpenSettings);
         LeaveRoomCommand = ReactiveCommand.CreateFromTask(LeaveRoom);
-        CloseRoomCommand = ReactiveCommand.CreateFromTask(CloseRoom);
-        UploadSaveCommand = ReactiveCommand.CreateFromTask(UploadSave);
-        DownloadSaveCommand = ReactiveCommand.CreateFromTask(DownloadSave);
-        SendMessageCommand = ReactiveCommand.CreateFromTask(SendMessage);
+        CloseRoomCommand = ReactiveCommand.CreateFromTask(CloseRoom, isOnline);
+        UploadSaveCommand = ReactiveCommand.CreateFromTask(UploadSave, isOnline);
+        DownloadSaveCommand = ReactiveCommand.CreateFromTask(DownloadSave, isOnline);
+        SendMessageCommand = ReactiveCommand.CreateFromTask(SendMessage, canSend);
         ClearMessagesCommand = ReactiveCommand.Create(ClearMessage);
-        SetRoomConfigCommand = ReactiveCommand.CreateFromTask(SetRoomConfig);
-        SetKingNameCommand = ReactiveCommand.CreateFromTask<PlayerInfo>(SetKingName);
-        SetOwnerCommand = ReactiveCommand.CreateFromTask<PlayerInfo>(SetOwner);
-        KickPlayerCommand = ReactiveCommand.CreateFromTask<PlayerInfo>(KickPlayer);
+        SetRoomConfigCommand = ReactiveCommand.CreateFromTask(SetRoomConfig, isOnline);
+        SetKingNameCommand = ReactiveCommand.CreateFromTask<PlayerInfo>(SetKingName, isOnline);
+        SetOwnerCommand = ReactiveCommand.CreateFromTask<PlayerInfo>(SetOwner, isOnline);
+        KickPlayerCommand = ReactiveCommand.CreateFromTask<PlayerInfo>(KickPlayer, isOnline);
     }
 
     protected override void DoWhenActivated(CompositeDisposable disposable)
@@ -105,33 +120,36 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
             })
             .DisposeWith(disposable);
 
-        _client.Events.SocketConnected
-            .Subscribe(_ =>
+        _client.Events.SocketConnectionChanged
+            .ObserveOn(RxApp.MainThreadScheduler)
+            .Subscribe(async connected =>
             {
-                AddSystemMessage("成功连接到服务器");
-            })
-            .DisposeWith(disposable);
-
-        _client.Events.SocketDisconnected
-            .Subscribe(async active =>
-            {
-                AddSystemMessage("连接中断", MessageLevel.Warning);
-                if (!_client.IsTerminated) // 没有彻底终止连接，说明是网络问题，尝试重连
+                if (connected == true)
                 {
-                    for (int i = 0; i < 5; i++)
+                    AddSystemMessage("成功连接到服务器");
+                    IsOnline = true;
+                }
+                else if (connected == false)
+                {
+                    AddSystemMessage("连接中断", MessageLevel.Warning);
+                    IsOnline = false;
+                    if (!_client.IsTerminated) // 没有彻底终止连接，说明是网络问题，尝试重连
                     {
-                        try
+                        for (int i = 0; i < 5; i++)
                         {
-                            AddSystemMessage($"尝试重连({i + 1}/5)...");
-                            await _client.Reconnect(_cts.Token);
-                            break;
-                        }
-                        catch
-                        {
-                            // ignored
-                        }
+                            try
+                            {
+                                AddSystemMessage($"尝试重连({i + 1}/5)...");
+                                await _client.Reconnect(_cts.Token);
+                                break;
+                            }
+                            catch
+                            {
+                                // ignored
+                            }
 
-                        await Task.Delay(3000);
+                            await Task.Delay(3000);
+                        }
                     }
                 }
             })
@@ -324,7 +342,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
     {
         try
         {
-            await _client.SendMessage(InputText);
+            await _client.SendMessage(InputText.Trim());
             InputText = "";
         }
         catch (Exception ex)

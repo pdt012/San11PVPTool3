@@ -11,11 +11,8 @@ public class ClientEvents
     private readonly BehaviorSubject<(PlayerInfo?, RoomInfo?)> _loginStateChanged = new((null, null));
     public IObservable<(PlayerInfo?, RoomInfo?)> LoginStateChanged => _loginStateChanged.AsObservable();
 
-    private readonly Subject<Unit> _socketConnected = new();
-    public IObservable<Unit> SocketConnected => _socketConnected.AsObservable();
-
-    private readonly Subject<Unit> _socketDisconnected = new();
-    public IObservable<Unit> SocketDisconnected => _socketDisconnected.AsObservable();
+    private readonly BehaviorSubject<bool?> _socketConnectionChanged = new(null);
+    public IObservable<bool?> SocketConnectionChanged => _socketConnectionChanged.AsObservable();
 
     private readonly Subject<PlayerKickedEventData> _playerKicked = new();
     public IObservable<PlayerKickedEventData> PlayerKicked => _playerKicked.AsObservable();
@@ -39,9 +36,9 @@ public class ClientEvents
     internal void OnLoginStateChanged(PlayerInfo? userInfo, RoomInfo? roomInfo) =>
         _loginStateChanged.OnNext((userInfo, roomInfo));
 
-    internal void OnSocketConnected() => _socketConnected.OnNext(Unit.Default);
+    internal void OnSocketConnected() => _socketConnectionChanged.OnNext(true);
 
-    internal void OnSocketDisconnected() => _socketDisconnected.OnNext(Unit.Default);
+    internal void OnSocketDisconnected() => _socketConnectionChanged.OnNext(false);
 
     internal void OnPlayerKicked(PlayerKickedEventData ed) => _playerKicked.OnNext(ed);
 
