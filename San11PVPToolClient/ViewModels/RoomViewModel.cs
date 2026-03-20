@@ -288,6 +288,12 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
 
     private async Task LeaveRoom()
     {
+        if (!_client.IsTerminated &&
+            !await _mainViewModel.ShowAskBoxAsync("离开房间", "联机进行中，确认离开房间？"))
+        {
+            return;
+        }
+
         try
         {
             await _client.LeaveRoom();
@@ -301,6 +307,12 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
 
     private async Task CloseRoom()
     {
+        if ((RoomInfo?.Players.Count ?? 0) > 1 &&
+            !await _mainViewModel.ShowAskBoxAsync("关闭房间", "关闭房间将踢出所有玩家，确认关闭？"))
+        {
+            return;
+        }
+
         try
         {
             await _client.CloseRoom();

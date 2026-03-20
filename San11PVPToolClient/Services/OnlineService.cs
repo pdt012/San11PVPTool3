@@ -50,7 +50,7 @@ public class OnlineService
     public bool IsConnected => SocketClient.IsConnected;
 
     /// <summary>
-    /// 是否还在房间内（包括掉线）
+    /// 是否完全终止连接（不仅仅是掉线）
     /// </summary>
     public bool IsTerminated => _roomId == null || _playerId == null;
 
