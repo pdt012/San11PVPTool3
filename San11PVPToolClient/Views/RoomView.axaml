@@ -32,10 +32,11 @@
       <Setter Property="CaretBrush" Value="Transparent" />
     </Style>
 
-    <Style Selector="TextBox.Entry">
+    <Style Selector="TextBox.ChatEntry">
       <Setter Property="MinHeight" Value="30" />
-      <Setter Property="Height" Value="30" />
       <Setter Property="Margin" Value="3" />
+      <Setter Property="AcceptsReturn" Value="True" />
+      <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
 
     <Style Selector="Button.Tool">
@@ -216,8 +217,7 @@
     <DockPanel Grid.Row="2" Grid.Column="2">
       <Button Content="发送" Classes="Tool" DockPanel.Dock="Right"
               Command="{Binding SendMessageCommand}" />
-      <TextBox Text="{Binding InputText}" Classes="Entry"
-               AcceptsReturn="True">
+      <TextBox Text="{Binding InputText}" Classes="ChatEntry">
         <TextBox.KeyBindings>
           <KeyBinding Gesture="Enter"
                       Command="{Binding SendMessageCommand}" />
