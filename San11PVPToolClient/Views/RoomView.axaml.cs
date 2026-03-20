@@ -1,13 +1,10 @@
 ﻿using System.Collections.Specialized;
-using System.Reactive;
 using System.Reactive.Disposables;
 using Avalonia.Controls;
 using Avalonia.ReactiveUI;
 using Avalonia.Threading;
-using MsBox.Avalonia;
 using ReactiveUI;
 using San11PVPToolClient.Dialogs;
-using San11PVPToolClient.Models;
 using San11PVPToolClient.ViewModels;
 using San11PVPToolShared.Models;
 
@@ -31,34 +28,6 @@ public partial class RoomView : ReactiveUserControl<RoomViewModel>
                     ViewModel.Messages.CollectionChanged -= MessagesChanged;
                 }).DisposeWith(disposables);
             }
-
-            ViewModel!.ShowMsgBoxInteraction.RegisterHandler(async interaction =>
-            {
-                var boxParams = interaction.Input;
-                boxParams.Topmost = true;
-
-                await Dispatcher.UIThread.InvokeAsync(async () =>
-                {
-                    var box = MessageBoxManager.GetMessageBoxStandard(boxParams);
-
-                    await box.ShowWindowDialogAsync(TopLevel.GetTopLevel(this) as Window);
-                });
-
-                interaction.SetOutput(Unit.Default);
-            });
-
-            ViewModel!.OpenSettingsInteraction.RegisterHandler(async interaction =>
-            {
-                var dialog = new UserSettingsDialog()
-                {
-                    Title = "设置",
-                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                    ViewModel = new UserSettingsDialogViewModel(interaction.Input)
-                };
-
-                var result = await dialog.ShowDialog<UserSettings?>(TopLevel.GetTopLevel(this) as Window);
-                interaction.SetOutput(result);
-            }).DisposeWith(disposables);
 
             ViewModel!.SetRoomConfigInteraction.RegisterHandler(async interaction =>
             {

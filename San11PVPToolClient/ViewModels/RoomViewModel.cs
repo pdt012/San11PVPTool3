@@ -9,10 +9,7 @@ using System.Reactive.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
-using Avalonia.Platform;
 using Avalonia.Threading;
-using MsBox.Avalonia.Dto;
-using MsBox.Avalonia.Enums;
 using ReactiveUI;
 using San11PVPToolClient.Models;
 using San11PVPToolClient.Services;
@@ -59,7 +56,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
 
     public ObservableCollection<MessageItem> Messages { get; } = new();
 
-
+    private readonly MainViewModel _mainViewModel;
     private readonly OnlineService _client;
     private readonly UserSettingsService _userSettingsService;
 
@@ -82,14 +79,14 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
     public ReactiveCommand<PlayerInfo, Unit> SetOwnerCommand { get; }
     public ReactiveCommand<PlayerInfo, Unit> KickPlayerCommand { get; }
 
-    public Interaction<MessageBoxStandardParams, Unit> ShowMsgBoxInteraction { get; } = new();
-    public Interaction<UserSettings, UserSettings?> OpenSettingsInteraction { get; } = new();
     public Interaction<Unit, RoomConfig?> SetRoomConfigInteraction { get; } = new();
     public Interaction<PlayerInfo, string?> SetKingNameInteraction { get; } = new();
 
-    public RoomViewModel(IScreen screen, OnlineService client, UserSettingsService userSettingsService)
+    public RoomViewModel(IScreen screen, MainViewModel mainViewModel, OnlineService client,
+        UserSettingsService userSettingsService)
     {
         HostScreen = screen;
+        _mainViewModel = mainViewModel;
         _client = client;
         _userSettingsService = userSettingsService;
 
@@ -218,13 +215,13 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
                         {
                             AddSystemMessage("自动下载存档");
                             await DownloadSave();
-                            await ShowMsgBoxAsync("你的回合",
+                            await _mainViewModel.ShowMsgBoxAsync("你的回合",
                                 "轮到你的回合了，请载入31号存档继续游戏！",
                                 location: WindowStartupLocation.CenterScreen);
                         }
                         else
                         {
-                            await ShowMsgBoxAsync("你的回合",
+                            await _mainViewModel.ShowMsgBoxAsync("你的回合",
                                 "轮到你的回合了，请下载存档后载入31号存档继续游戏！",
                                 location: WindowStartupLocation.CenterScreen);
                         }
@@ -282,7 +279,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
 
     private async Task OpenSettings()
     {
-        var userSettings = await OpenSettingsInteraction.Handle(_userSettingsService.Settings);
+        var userSettings = await _mainViewModel.OpenSettingsInteraction.Handle(_userSettingsService.Settings);
         if (userSettings is null) return;
         _userSettingsService.Settings = userSettings;
         _userSettingsService.Save();
@@ -419,22 +416,6 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
             Messages.Add(new(message.SenderId, message.SenderName, message.Message, DateTime.Now,
                 DisplayAlignment: message.SenderId == UserInfo?.PlayerId ? "Right" : "Left"));
         });
-    }
-
-    private async Task ShowMsgBoxAsync(string title, string message, Icon icon = Icon.Info,
-        ButtonEnum button = ButtonEnum.Ok, WindowStartupLocation location = WindowStartupLocation.CenterOwner)
-    {
-        await using var stream = AssetLoader.Open(new Uri("avares://San11PVPToolClient/Assets/pvpTool.ico"));
-        var boxParams = new MessageBoxStandardParams
-        {
-            WindowIcon = new WindowIcon(stream),
-            ContentTitle = title,
-            ContentMessage = message,
-            Icon = icon,
-            ButtonDefinitions = button,
-            WindowStartupLocation = location
-        };
-        await ShowMsgBoxInteraction.Handle(boxParams);
     }
 
     private async void SaveDataCheckTimer_TickAsync(object? sender, EventArgs e)

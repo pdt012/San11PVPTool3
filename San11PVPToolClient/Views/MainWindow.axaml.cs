@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Reactive.Disposables;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
@@ -6,6 +7,11 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.ReactiveUI;
 using Avalonia.Threading;
+using MsBox.Avalonia;
+using MsBox.Avalonia.Enums;
+using ReactiveUI;
+using San11PVPToolClient.Dialogs;
+using San11PVPToolClient.Models;
 using San11PVPToolClient.ViewModels;
 
 namespace San11PVPToolClient.Views;
@@ -26,9 +32,68 @@ public partial class MainWindow : ReactiveWindow<MainViewModel>
     {
         InitializeComponent();
 
+        Closing += OnClosing;
         PositionChanged += OnPositionChanged;
         PointerEntered += OnPointerEntered;
         PointerExited += OnPointerExited;
+
+        this.WhenActivated(disposables =>
+        {
+            ViewModel!.ShowMsgBoxInteraction.RegisterHandler(async interaction =>
+            {
+                var boxParams = interaction.Input;
+                boxParams.Topmost = true;
+                var result = ButtonResult.None;
+
+                await Dispatcher.UIThread.InvokeAsync(async () =>
+                {
+                    var box = MessageBoxManager.GetMessageBoxStandard(boxParams);
+                    result = await box.ShowWindowDialogAsync(this);
+                    interaction.SetOutput(result);
+                });
+            });
+            
+            ViewModel!.OpenSettingsInteraction.RegisterHandler(async interaction =>
+            {
+                var dialog = new UserSettingsDialog()
+                {
+                    Title = "设置",
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    ViewModel = new UserSettingsDialogViewModel(interaction.Input)
+                };
+
+                var result = await dialog.ShowDialog<UserSettings?>(this);
+                interaction.SetOutput(result);
+            }).DisposeWith(disposables);
+        });
+    }
+    
+    private bool _isCheckingClose;
+    private void OnClosing(object? sender, WindowClosingEventArgs e)
+    {
+        if (_isCheckingClose) return;
+
+        e.Cancel = true; // 先阻止关闭
+        _isCheckingClose = true;
+        
+        if (ViewModel == null) return;
+        
+        _ = CheckCanCloseAsync();
+        return;
+
+        async Task CheckCanCloseAsync()
+        {
+            try
+            {
+                var canClose = await ViewModel.CanCloseAsync();
+                if (canClose)
+                    Close();
+            }
+            finally
+            {
+                _isCheckingClose = false;
+            }
+        }
     }
 
     private void OnPositionChanged(object? sender, PixelPointEventArgs e)
