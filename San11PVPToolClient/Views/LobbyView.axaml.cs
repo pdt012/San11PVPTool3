@@ -22,7 +22,8 @@ public partial class LobbyView : ReactiveUserControl<LobbyViewModel>
         {
             ViewModel!.SetRoomConfigInteraction.RegisterHandler(async interaction =>
             {
-                var dialog = new RoomConfigDialog
+                var dialog = new RoomConfigDialog(
+                    new RoomConfigDialogViewModel(new RoomConfig("联机房间", null, 4)))
                 {
                     Title = "房间信息设置", WindowStartupLocation = WindowStartupLocation.CenterOwner
                 };
