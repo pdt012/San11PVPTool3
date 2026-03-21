@@ -154,6 +154,9 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
 
                             await Task.Delay(3000);
                         }
+                        // 重连失败
+                        AddSystemMessage("无法连接到服务器", MessageLevel.Warning);
+                        await _client.TerminateSocket();
                     }
                 }
             })
