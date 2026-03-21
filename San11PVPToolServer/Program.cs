@@ -143,13 +143,13 @@ public class Program
         // 文件目标
         var fileTarget = new FileTarget("file")
         {
-            FileName = "logs/logfile.log",
+            FileName = "logs/pvp-server.log",
             Layout = "[${longdate}] [${level:uppercase=true}] <${logger}> ${message} ${exception:format=tostring}",
         };
 
         // 添加 target
         config.AddTarget(consoleTarget);
-        //config.AddTarget(fileTarget);
+        config.AddTarget(fileTarget);
 
         // 规则：日志同时写入控制台和文件
         config.AddRule(LogLevel.Debug, LogLevel.Fatal, consoleTarget);

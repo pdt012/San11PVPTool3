@@ -108,6 +108,8 @@ public partial class MainWindow : ReactiveWindow<MainViewModel>
     private void OnPointerEntered(object? sender, PointerEventArgs e)
     {
         // Console.WriteLine($"Enter hidden={_isHidden}");
+        if (PlatformImpl == null) return;
+        
         _isHover = true;
         if (!_isHidden) return;
 
@@ -135,6 +137,8 @@ public partial class MainWindow : ReactiveWindow<MainViewModel>
     private async void OnPointerExited(object? sender, PointerEventArgs e)
     {
         // Console.WriteLine($"Exit hidden={_isHidden}");
+        if (PlatformImpl == null) return;
+        
         _isHover = false;
         if (_isHidden) return;
 
