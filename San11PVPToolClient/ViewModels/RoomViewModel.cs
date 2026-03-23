@@ -22,8 +22,6 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
     public string UrlPathSegment => "room";
     public IScreen HostScreen { get; }
 
-    public bool IsRoomOwner => UserInfo != null && UserInfo.IsRoomOwner;
-
     public PlayerInfo? UserInfo
     {
         get;
@@ -53,6 +51,9 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
         get;
         set => this.RaiseAndSetIfChanged(ref field, value);
     } = false;
+    
+    private readonly ObservableAsPropertyHelper<bool> _isRoomOwner;
+    public bool IsRoomOwner => _isRoomOwner.Value;
 
     public ObservableCollection<MessageItem> Messages { get; } = new();
 
@@ -89,6 +90,11 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
         _mainViewModel = mainViewModel;
         _client = client;
         _userSettingsService = userSettingsService;
+        
+        _isRoomOwner = this
+            .WhenAnyValue(x => x.UserInfo)
+            .Select(u => u != null && u.IsRoomOwner)
+            .ToProperty(this, x => x.IsRoomOwner);
 
         var isOnline = this.WhenAnyValue(x => x.IsOnline)
             .Select(x => x);
