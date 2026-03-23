@@ -31,7 +31,15 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
     public RoomInfo? RoomInfo
     {
         get;
-        set => this.RaiseAndSetIfChanged(ref field, value);
+        set
+        {
+            if (value != null)
+            {
+                // 对玩家列表排序
+                value = value with { Players = SortPlayers(value.Players) };
+            }
+            this.RaiseAndSetIfChanged(ref field, value);
+        }
     }
 
     public SaveDataSummary? SaveDataSummary
@@ -441,6 +449,14 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
             Messages.Add(new(message.SenderId, message.SenderName, message.Message, DateTime.Now,
                 DisplayAlignment: message.SenderId == UserInfo?.PlayerId ? "Right" : "Left"));
         });
+    }
+
+    private List<PlayerInfo> SortPlayers(List<PlayerInfo> players)
+    {
+        return players
+            .OrderByDescending(player => player.PlayerId == UserInfo?.PlayerId)
+            .ThenByDescending(player => player.Role)
+            .ToList();
     }
 
     private async void SaveDataCheckTimer_TickAsync(object? sender, EventArgs e)
