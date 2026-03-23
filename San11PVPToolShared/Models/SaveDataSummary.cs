@@ -2,5 +2,6 @@
 
 public record SaveDataSummary(
     string CurrentKingName,
-    int CurrentKingId
+    string NextPlayerKingName,
+    int NextPlayerForceId
     );
