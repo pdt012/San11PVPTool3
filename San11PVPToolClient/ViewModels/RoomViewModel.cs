@@ -130,7 +130,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
             {
                 if (connected == true)
                 {
-                    AddSystemMessage("成功连接到服务器");
+                    AddSystemMessage("成功连接到服务器", level:MessageLevel.Success);
                     IsOnline = true;
                 }
                 else if (connected == false)
@@ -169,7 +169,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
                 var byPlayer = eventData.ByPlayer;
                 if (eventData.KickedPlayer.PlayerId == UserInfo?.PlayerId)
                 {
-                    AddSystemMessage($"你被{eventData.ByPlayer.Name}踢出房间");
+                    AddSystemMessage($"你被{eventData.ByPlayer.Name}踢出房间", level:MessageLevel.Highlight);
                     await _client.TerminateSocket();
                 }
                 else
@@ -182,7 +182,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
         _client.Events.RoomClosed
             .Subscribe(async _ =>
             {
-                AddSystemMessage("房间已关闭");
+                AddSystemMessage("房间已关闭", level:MessageLevel.Highlight);
                 await _client.TerminateSocket();
             })
             .DisposeWith(disposable);
@@ -229,6 +229,8 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
                                 "轮到你的回合了，请下载存档后载入31号存档继续游戏！",
                                 location: WindowStartupLocation.CenterScreen);
                         }
+
+                        AddSystemMessage("你的回合", level: MessageLevel.Highlight);
                     }
                 }
             })

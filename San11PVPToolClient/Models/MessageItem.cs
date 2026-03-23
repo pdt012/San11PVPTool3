@@ -15,6 +15,8 @@ public record MessageItem(
     public string MessageForeGround => Level switch
     {
         MessageLevel.Normal => "Gray",
+        MessageLevel.Success => "Green",
+        MessageLevel.Highlight => "Blue",
         MessageLevel.Warning => "Orange",
         MessageLevel.Error => "Red",
         _ => "Gray"
@@ -24,6 +26,8 @@ public record MessageItem(
 public enum MessageLevel
 {
     Normal,
+    Success,
+    Highlight,
     Warning,
     Error
 }
