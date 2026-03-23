@@ -21,8 +21,19 @@
     </Style>
     <Style Selector="TextBlock.Display">
       <Setter Property="VerticalAlignment" Value="Center" />
-      <Setter Property="HorizontalAlignment" Value="Right" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
       <Setter Property="Margin" Value="3,3,0,0" />
+    </Style>
+    <Style Selector="TextBlock.Title">
+      <Setter Property="FontSize" Value="20" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="Margin" Value="9,3,3,3" />
+    </Style>
+    <Style Selector="TextBlock.Small">
+      <Setter Property="FontSize" Value="12" />
+    </Style>
+    <Style Selector="TextBlock.Bold">
+      <Setter Property="FontWeight" Value="Bold" />
     </Style>
 
     <Style Selector="TextBox.Message">
@@ -79,24 +90,14 @@
     <Grid Grid.Row="1" Grid.RowSpan="2" RowDefinitions="auto, *">
       <StackPanel Orientation="Vertical" HorizontalAlignment="Left"
                   Grid.Row="0">
-        <TextBlock Text="[个人信息]" Classes="Label" />
         <StackPanel Orientation="Horizontal">
-          <TextBlock Text="昵称：" Classes="Label" />
-          <TextBlock Text="{Binding UserInfo.NameDisplay}" Classes="Display" />
-        </StackPanel>
-
-        <StackPanel Orientation="Horizontal">
-          <TextBlock Text="[房间信息]" Classes="Label" />
-        </StackPanel>
-        <StackPanel Orientation="Horizontal">
-          <TextBlock Text="名称：" Classes="Label" />
-          <TextBlock Text="{Binding RoomInfo.Name}" Classes="Display" />
-          <TextBlock Text="{Binding RoomInfo.ShortId, StringFormat='({0})'}" Classes="Display" />
+          <TextBlock Text="{Binding RoomInfo.Name}" Classes="Title" />
+          <TextBlock Text="{Binding RoomInfo.ShortId, StringFormat='({0})'}" Classes="Display Small" />
         </StackPanel>
 
         <StackPanel Orientation="Horizontal">
           <TextBlock Text="当前行动君主：" Classes="Label" />
-          <TextBlock Classes="Display" Text="{Binding SaveDataSummary.CurrentKingName}" />
+          <TextBlock Classes="Display Bold" Text="{Binding SaveDataSummary.CurrentKingName}" />
         </StackPanel>
 
         <StackPanel Orientation="Horizontal">
@@ -125,11 +126,14 @@
                        Fill="{Binding StateBrush}" Stroke="#808080" StrokeThickness="0.5" />
 
               <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center"
-                         Text="{Binding KingName}" FontWeight="Medium" Foreground="#758586" />
+                         Text="{Binding KingName}" FontWeight="Medium" Foreground="#556566" />
 
               <StackPanel VerticalAlignment="Center">
-                <TextBlock Text="{Binding NameDisplay}" FontWeight="Medium" Foreground="#2C3E50" />
-                <TextBlock Text="{Binding RoleDisplay}" FontSize="10" Foreground="#758586" />
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock Text="{Binding Name}" FontWeight="Bold" Foreground="#2C3E50" />
+                  <TextBlock Text="{Binding ShortId, StringFormat='({0})'}" Classes="Small" Foreground="#2C3E50" />
+                </StackPanel>
+                <TextBlock Text="{Binding RoleDisplay}" Classes="Small" Foreground="#556566" />
               </StackPanel>
             </DockPanel>
           </DataTemplate>

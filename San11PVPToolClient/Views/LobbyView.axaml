@@ -44,6 +44,7 @@
 
     <!-- 房间列表 -->
     <DataGrid ItemsSource="{Binding Rooms}"
+              IsReadOnly="True"
               AutoGenerateColumns="False" MinWidth="100" MinHeight="100"
               Margin="10">
 
