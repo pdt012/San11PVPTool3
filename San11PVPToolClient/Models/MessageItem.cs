@@ -9,7 +9,7 @@ public record MessageItem(
     DateTime Time,
     bool IsSystemMessage = false,
     MessageLevel Level = MessageLevel.Normal,
-    string DisplayAlignment = "Center"
+    bool SenderIsMe = false
 )
 {
     public string MessageForeGround => Level switch

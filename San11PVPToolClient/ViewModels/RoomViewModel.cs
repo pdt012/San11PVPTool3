@@ -462,7 +462,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
         Dispatcher.UIThread.Post(() =>
         {
             Messages.Add(new(message.SenderId, message.SenderName, message.Message, DateTime.Now,
-                DisplayAlignment: message.SenderId == UserInfo?.PlayerId ? "Right" : "Left"));
+                SenderIsMe: message.SenderId == UserInfo?.PlayerId));
         });
     }
 
