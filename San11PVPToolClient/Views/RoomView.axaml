@@ -62,28 +62,35 @@
       <Setter Property="HorizontalAlignment" Value="Center" />
       <Setter Property="Margin" Value="40,6" />
     </Style>
-    <Style Selector="StackPanel.PlayerMsg">
+    <Style Selector="DockPanel.PlayerMsg">
       <Setter Property="HorizontalAlignment" Value="Left" />
       <Setter Property="Margin" Value="10,3,30,3" />
     </Style>
-    <Style Selector="StackPanel.PlayerMsg.IsMe">
+    <Style Selector="DockPanel.PlayerMsg.IsMe">
       <Setter Property="HorizontalAlignment" Value="Right" />
       <Setter Property="Margin" Value="30,3,10,3" />
     </Style>
-    
+
     <Style Selector="TextBlock.MsgSender">
       <Setter Property="HorizontalAlignment" Value="Left" />
       <Setter Property="FontSize" Value="10" />
       <Setter Property="Foreground" Value="Gray" />
       <Setter Property="Margin" Value="2,0" />
     </Style>
+    <Style Selector="TextBlock.MsgSender.IsMe">
+      <Setter Property="HorizontalAlignment" Value="Right" />
+    </Style>
+
     <Style Selector="TextBlock.MsgTime">
+      <Setter Property="DockPanel.Dock" Value="Right" />
       <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="VerticalAlignment" Value="Bottom" />
       <Setter Property="FontSize" Value="9" />
       <Setter Property="Foreground" Value="DarkGray" />
       <Setter Property="Margin" Value="2,0" />
     </Style>
-    <Style Selector="TextBlock.IsMe">
+    <Style Selector="TextBlock.MsgTime.IsMe">
+      <Setter Property="DockPanel.Dock" Value="Left" />
       <Setter Property="HorizontalAlignment" Value="Right" />
     </Style>
 
@@ -95,7 +102,7 @@
     <Style Selector="Border.MsgBox.IsMe">
       <Setter Property="Background" Value="#E1F5DE" />
     </Style>
-    
+
   </UserControl.Styles>
 
   <Grid RowDefinitions="auto, *, auto">
@@ -242,16 +249,16 @@
                            TextWrapping="WrapWithOverflow" HorizontalAlignment="Center" />
               </StackPanel>
 
-              <StackPanel IsVisible="{Binding !IsSystemMessage}"
-                          Classes="PlayerMsg" Classes.IsMe="{Binding SenderIsMe}">
-                <TextBlock Text="{Binding SenderName}"
-                           Classes="MsgSender" Classes.IsMe="{Binding SenderIsMe}"/>
+              <DockPanel IsVisible="{Binding !IsSystemMessage}"
+                         Classes="PlayerMsg" Classes.IsMe="{Binding SenderIsMe}">
+                <TextBlock Text="{Binding SenderName}" DockPanel.Dock="Top"
+                           Classes="MsgSender" Classes.IsMe="{Binding SenderIsMe}" />
+                <TextBlock Text="{Binding Time, StringFormat='HH:mm'}"
+                           Classes="MsgTime" Classes.IsMe="{Binding SenderIsMe}" />
                 <Border Classes="MsgBox" Classes.IsMe="{Binding SenderIsMe}">
                   <SelectableTextBlock Text="{Binding Message}" TextWrapping="Wrap" MaxWidth="300" />
                 </Border>
-                <TextBlock Text="{Binding Time, StringFormat='HH:mm'}"
-                           Classes="MsgTime" Classes.IsMe="{Binding SenderIsMe}"/>
-              </StackPanel>
+              </DockPanel>
             </Panel>
           </DataTemplate>
         </ItemsControl.ItemTemplate>
