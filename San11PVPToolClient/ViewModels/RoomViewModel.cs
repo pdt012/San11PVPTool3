@@ -153,12 +153,14 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
                     IsOnline = false;
                     if (!_client.IsTerminated) // 没有彻底终止连接，说明是网络问题，尝试重连
                     {
+                        bool reconnected = false;
                         for (int i = 0; i < 5; i++)
                         {
                             try
                             {
                                 AddSystemMessage($"尝试重连({i + 1}/5)...");
                                 await _client.Reconnect(_cts.Token);
+                                reconnected = true;
                                 break;
                             }
                             catch
@@ -170,8 +172,11 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
                         }
 
                         // 重连失败
-                        AddSystemMessage("无法连接到服务器", MessageLevel.Warning);
-                        await _client.TerminateSocket();
+                        if (!reconnected)
+                        {
+                            AddSystemMessage("无法连接到服务器", MessageLevel.Warning);
+                            await _client.TerminateSocket();
+                        }
                     }
                 }
             })
