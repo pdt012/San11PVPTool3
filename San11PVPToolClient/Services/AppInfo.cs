@@ -6,7 +6,7 @@ public static class AppInfo
 {
     public static string Name { get; } = "三国志11联机工具";
 
-    public static Version Version { get; } = new Version("3.0.0");
+    public static Version Version { get; } = new Version("3.0.1");
 
     public static string Author { get; } = "氕氘氚";
 
