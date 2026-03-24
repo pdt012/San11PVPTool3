@@ -69,7 +69,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
     private readonly OnlineService _client;
     private readonly UserSettingsService _userSettingsService;
 
-    private CancellationTokenSource _cts;
+    private CancellationTokenSource _connectCts;
 
     private DateTime _saveDataMTime;
     private DispatcherTimer? _saveDataCheckTimer;
@@ -159,7 +159,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
                             try
                             {
                                 AddSystemMessage($"尝试重连({i + 1}/5)...");
-                                await _client.Reconnect(_cts.Token);
+                                await _client.Reconnect(_connectCts.Token);
                                 reconnected = true;
                                 break;
                             }
@@ -269,16 +269,26 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
             })
             .DisposeWith(disposable);
 
-        _cts = new CancellationTokenSource();
+        _connectCts = new CancellationTokenSource();
         // 当 deactivate 时自动取消
         Disposable.Create(() =>
             {
-                _cts.Cancel();
-                _cts.Dispose();
+                _connectCts.Cancel();
+                _connectCts.Dispose();
             })
             .DisposeWith(disposable);
 
         InitAutoUploadTimer();
+        Disposable.Create(() =>
+            {
+                // 退出时关闭 timer
+                if (_saveDataCheckTimer != null && _saveDataCheckTimer.IsEnabled)
+                {
+                    _saveDataCheckTimer.Stop();
+                    _saveDataCheckTimer.Tick -= SaveDataCheckTimer_TickAsync;
+                }
+            })
+            .DisposeWith(disposable);
     }
 
     private void InitAutoUploadTimer()
