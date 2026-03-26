@@ -57,14 +57,15 @@ public static class SaveDataParser
         return new SaveDataSummary(kingName, nextKingName, nextForceId);
     }
 
-    private static bool TryGetNextPlayer(BinaryStructStream bss, ref string nextKingName, ref int nextForceId)
+    private static unsafe bool TryGetNextPlayer(BinaryStructStream bss, ref string nextKingName, ref int nextForceId)
     {
         var turnTable = GetTurnTable(bss);
         
         int loopStartId = turnTable.currentTurnIndex + 1; // 从下一个势力开始寻找
         for (int i = 0; i < turnTable.turnTableSize - 1 /*排除当前行动势力*/; i++)
         {
-            int forceId = (loopStartId + i) % turnTable.turnTableSize;
+            int index = (loopStartId + i) % turnTable.turnTableSize;
+            int forceId = turnTable.turnTable[index];
             if (forceId is < 0 or >= 47) continue;
             int playerId = GetForcePlayerId(bss, forceId);
             if (playerId == -1) continue;
