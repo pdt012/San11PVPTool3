@@ -60,7 +60,8 @@ public class SaveController : ControllerBase
                 s_logger.Error(ex, "Failed to load save data");
             }
 
-            s_logger.Info($"{player.Name}上传存档.(君主:{saveDataSummary?.CurrentKingName ?? "??"})");
+            s_logger.Info($"{player.Name}上传存档.(君主:{
+                saveDataSummary?.CurrentKingName ?? "??"} -> {saveDataSummary?.NextPlayerKingName ?? "??"})");
             _ = RoomEventDispatcher.SendToRoom(roomId, EventTypes.SaveUploaded,
                 new SaveUploadedEventData(player.ToDTO(), saveDataSummary));
         }

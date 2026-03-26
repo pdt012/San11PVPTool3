@@ -49,6 +49,10 @@ public static class SaveDataParser
             bss = new BinaryStructStream(s11SaveData._rawData);
             TryGetNextPlayer(bss, ref nextKingName, ref nextForceId);
         }
+        else
+        {
+            nextKingName = kingName;
+        }
 
         return new SaveDataSummary(kingName, nextKingName, nextForceId);
     }

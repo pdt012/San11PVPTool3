@@ -96,8 +96,8 @@
         </StackPanel>
 
         <StackPanel Orientation="Horizontal">
-          <TextBlock Text="当前行动君主：" Classes="Label" />
-          <TextBlock Classes="Display Bold" Text="{Binding SaveDataSummary.CurrentKingName}" />
+          <TextBlock Text="行动君主：" Classes="Label" />
+          <TextBlock Classes="Display Bold" Text="{Binding SaveDataSummary.NextPlayerKingName}" />
         </StackPanel>
 
         <StackPanel Orientation="Horizontal">

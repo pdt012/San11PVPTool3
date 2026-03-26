@@ -227,7 +227,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
                 else
                 {
                     AddSystemMessage($"{player.Name}上传了存档");
-                    if (SaveDataSummary != null && SaveDataSummary.CurrentKingName == UserInfo?.KingName)
+                    if (SaveDataSummary != null && SaveDataSummary.NextPlayerKingName == UserInfo?.KingName)
                     {
                         if (_userSettingsService.Settings.AutoDownload)
                         {
