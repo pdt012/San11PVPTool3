@@ -75,6 +75,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
     private DispatcherTimer? _saveDataCheckTimer;
 
     private readonly SemaphoreSlim _autoUploadSemaphore = new SemaphoreSlim(1, 1);
+    private readonly Dictionary<string, int> _playerForceIds = new();
 
     public ReactiveCommand<Unit, Unit> SettingsCommand { get; }
     public ReactiveCommand<Unit, Unit> LeaveRoomCommand { get; }
@@ -135,6 +136,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
                 UserInfo = x.Item1;
                 RoomInfo = x.Item2;
                 this.RaisePropertyChanged(nameof(IsRoomOwner));
+                WritePvpUserStatus();
             })
             .DisposeWith(disposable);
 
@@ -146,11 +148,13 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
                 {
                     AddSystemMessage("成功连接到服务器", level:MessageLevel.Success);
                     IsOnline = true;
+                    WritePvpUserStatus();
                 }
                 else if (connected == false)
                 {
                     AddSystemMessage("连接中断", MessageLevel.Warning);
                     IsOnline = false;
+                    WritePvpUserStatus();
                     if (!_client.IsTerminated) // 没有彻底终止连接，说明是网络问题，尝试重连
                     {
                         for (int i = 0; i < 5; i++)
@@ -184,6 +188,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
                 if (eventData.KickedPlayer.PlayerId == UserInfo?.PlayerId)
                 {
                     AddSystemMessage($"你被{eventData.ByPlayer.Name}踢出房间", level:MessageLevel.Highlight);
+                    WritePvpUserStatus(false);
                     await _client.TerminateSocket();
                 }
                 else
@@ -197,6 +202,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
             .Subscribe(async _ =>
             {
                 AddSystemMessage("房间已关闭", level:MessageLevel.Highlight);
+                WritePvpUserStatus(false);
                 await _client.TerminateSocket();
             })
             .DisposeWith(disposable);
@@ -211,6 +217,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
                 var myInfo = RoomInfo?.Players.FirstOrDefault(p => p.PlayerId == UserInfo?.PlayerId);
                 if (myInfo != null)
                     UserInfo = myInfo;
+                WritePvpUserStatus();
             })
             .DisposeWith(disposable);
 
@@ -219,6 +226,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
             {
                 var player = eventData.Player;
                 SaveDataSummary = eventData.SaveDataSummary;
+                UpdatePlayerForceId();
 
                 if (player.PlayerId == UserInfo?.PlayerId)
                 {
@@ -247,6 +255,8 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
                         AddSystemMessage("你的回合", level: MessageLevel.Highlight);
                     }
                 }
+
+                WritePvpUserStatus();
             })
             .DisposeWith(disposable);
 
@@ -268,6 +278,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
         // 当 deactivate 时自动取消
         Disposable.Create(() =>
             {
+                WritePvpUserStatus(false);
                 _cts.Cancel();
                 _cts.Dispose();
             })
@@ -304,6 +315,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
         _userSettingsService.Settings = userSettings;
         _userSettingsService.Save();
         InitAutoUploadTimer(); // 自动上传设定可能改变，重新初始化
+        WritePvpUserStatus();
     }
 
     private async Task LeaveRoom()
@@ -318,6 +330,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
         {
             if (!_client.IsTerminated)
                 await _client.LeaveRoom();
+            WritePvpUserStatus(false);
             await HostScreen.Router.NavigateBack.Execute();
         }
         catch (Exception ex)
@@ -381,6 +394,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
             var saveDataPath = Path.Combine(_userSettingsService.Settings.SaveDataDir, "Save031.s11");
             var mtime = File.GetLastWriteTime(saveDataPath);
             _saveDataMTime = mtime; // 避免触发自动上传
+            WritePvpUserStatus();
         }
         catch (Exception ex)
         {
@@ -457,6 +471,34 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
             .OrderByDescending(player => player.PlayerId == UserInfo?.PlayerId)
             .ThenByDescending(player => player.Role)
             .ToList();
+    }
+
+    private void UpdatePlayerForceId()
+    {
+        if (SaveDataSummary == null || SaveDataSummary.NextPlayerForceId < 0 || RoomInfo == null)
+            return;
+
+        var player = RoomInfo.Players.FirstOrDefault(
+            item => item.KingName == SaveDataSummary.NextPlayerKingName);
+        if (player != null)
+            _playerForceIds[player.PlayerId] = SaveDataSummary.NextPlayerForceId;
+    }
+
+    private void WritePvpUserStatus(bool? isOnline = null)
+    {
+        try
+        {
+            PvpUserStatusService.Write(
+                _userSettingsService.Settings.SaveDataDir,
+                isOnline ?? IsOnline,
+                SaveDataSummary?.NextPlayerForceId ?? -1,
+                RoomInfo?.Players ?? [],
+                _playerForceIds);
+        }
+        catch (Exception ex)
+        {
+            AddSystemMessage($"更新PVPUserStatus失败：{ex.Message}", MessageLevel.Error);
+        }
     }
 
     private async void SaveDataCheckTimer_TickAsync(object? sender, EventArgs e)
