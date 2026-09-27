@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -33,6 +34,7 @@ public static class PvpUserStatusService
             "# 全局状态",
             "# 0-单机, 1-联机",
             $"game_status={(isOnline ? 1 : 0)}",
+            $"heartbeat_ts={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}",
             $"my_force_id={myForceId}",
             $"current_turn_player_force_id={currentTurnPlayerForceId}",
             $"player_count={players.Count}"
@@ -61,6 +63,46 @@ public static class PvpUserStatusService
             try
             {
                 File.WriteAllText(tempPath, content, s_utf8WithoutBom);
+                File.Move(tempPath, targetPath, true);
+            }
+            finally
+            {
+                if (File.Exists(tempPath))
+                    File.Delete(tempPath);
+            }
+        }
+    }
+
+    public static void UpdateHeartbeat(string saveDataDir)
+    {
+        if (string.IsNullOrWhiteSpace(saveDataDir) || !Directory.Exists(saveDataDir))
+            return;
+
+        var targetPath = Path.Combine(saveDataDir, FileName);
+        if (!File.Exists(targetPath))
+            return;
+
+        var tempPath = targetPath + ".tmp";
+
+        lock (s_writeLock)
+        {
+            try
+            {
+                var lines = File.ReadAllLines(targetPath, s_utf8WithoutBom).ToList();
+                var heartbeatLine = $"heartbeat_ts={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
+                var heartbeatIndex = lines.FindIndex(line => line.StartsWith("heartbeat_ts=", StringComparison.Ordinal));
+
+                if (heartbeatIndex >= 0)
+                {
+                    lines[heartbeatIndex] = heartbeatLine;
+                }
+                else
+                {
+                    var gameStatusIndex = lines.FindIndex(line => line.StartsWith("game_status=", StringComparison.Ordinal));
+                    lines.Insert(gameStatusIndex >= 0 ? gameStatusIndex + 1 : 0, heartbeatLine);
+                }
+
+                File.WriteAllText(tempPath, string.Join("\r\n", lines), s_utf8WithoutBom);
                 File.Move(tempPath, targetPath, true);
             }
             finally

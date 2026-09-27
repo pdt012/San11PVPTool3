@@ -73,6 +73,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
 
     private DateTime _saveDataMTime;
     private DispatcherTimer? _saveDataCheckTimer;
+    private DispatcherTimer? _pvpHeartbeatTimer;
 
     private readonly SemaphoreSlim _autoUploadSemaphore = new SemaphoreSlim(1, 1);
     private readonly Dictionary<string, int> _playerForceIds = new();
@@ -285,6 +286,26 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
             .DisposeWith(disposable);
 
         InitAutoUploadTimer();
+        InitPvpHeartbeatTimer(disposable);
+    }
+
+    private void InitPvpHeartbeatTimer(CompositeDisposable disposable)
+    {
+        _pvpHeartbeatTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+        _pvpHeartbeatTimer.Tick += PvpHeartbeatTimer_Tick;
+        _pvpHeartbeatTimer.Start();
+
+        Disposable.Create(() =>
+            {
+                var timer = _pvpHeartbeatTimer;
+                if (timer == null)
+                    return;
+
+                timer.Stop();
+                timer.Tick -= PvpHeartbeatTimer_Tick;
+                _pvpHeartbeatTimer = null;
+            })
+            .DisposeWith(disposable);
     }
 
     private void InitAutoUploadTimer()
@@ -502,6 +523,18 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
         catch (Exception ex)
         {
             AddSystemMessage($"更新PVPUserStatus失败：{ex.Message}", MessageLevel.Error);
+        }
+    }
+
+    private void PvpHeartbeatTimer_Tick(object? sender, EventArgs e)
+    {
+        try
+        {
+            PvpUserStatusService.UpdateHeartbeat(_userSettingsService.Settings.SaveDataDir);
+        }
+        catch (Exception ex)
+        {
+            AddSystemMessage($"更新PVPUserStatus心跳失败：{ex.Message}", MessageLevel.Error);
         }
     }
 
