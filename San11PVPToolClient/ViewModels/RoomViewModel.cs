@@ -488,9 +488,13 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
     {
         try
         {
+            var myForceId = UserInfo == null
+                ? -1
+                : _playerForceIds.GetValueOrDefault(UserInfo.PlayerId, -1);
             PvpUserStatusService.Write(
                 _userSettingsService.Settings.SaveDataDir,
                 isOnline ?? IsOnline,
+                myForceId,
                 SaveDataSummary?.NextPlayerForceId ?? -1,
                 RoomInfo?.Players ?? [],
                 _playerForceIds);

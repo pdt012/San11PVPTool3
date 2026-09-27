@@ -16,6 +16,7 @@ public static class PvpUserStatusService
     public static void Write(
         string saveDataDir,
         bool isOnline,
+        int myForceId,
         int currentTurnPlayerForceId,
         IEnumerable<PlayerInfo> roomPlayers,
         IReadOnlyDictionary<string, int> playerForceIds)
@@ -32,6 +33,7 @@ public static class PvpUserStatusService
             "# 全局状态",
             "# 0-单机, 1-联机",
             $"game_status={(isOnline ? 1 : 0)}",
+            $"my_force_id={myForceId}",
             $"current_turn_player_force_id={currentTurnPlayerForceId}",
             $"player_count={players.Count}"
         ];
