@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -28,13 +29,15 @@ public static class PvpUserStatusService
         var players = roomPlayers
             .Where(player => player.Role >= PlayerRole.Player)
             .ToList();
+        var heartbeat = DateTimeOffset.Now.ToUniversalTime();
 
         List<string> lines =
         [
             "# 全局状态",
             "# 0-单机, 1-联机",
             $"game_status={(isOnline ? 1 : 0)}",
-            $"heartbeat_ts={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}",
+            $"heartbeat_ts={heartbeat.ToUnixTimeSeconds()}",
+            CreateHeartbeatUtcLine(heartbeat),
             $"my_force_id={myForceId}",
             $"current_turn_player_force_id={currentTurnPlayerForceId}",
             $"player_count={players.Count}"
@@ -89,18 +92,29 @@ public static class PvpUserStatusService
             try
             {
                 var lines = File.ReadAllLines(targetPath, s_utf8WithoutBom).ToList();
-                var heartbeatLine = $"heartbeat_ts={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
-                var heartbeatIndex = lines.FindIndex(line => line.StartsWith("heartbeat_ts=", StringComparison.Ordinal));
+                var heartbeat = DateTimeOffset.Now.ToUniversalTime();
+                var heartbeatTsLine = $"heartbeat_ts={heartbeat.ToUnixTimeSeconds()}";
+                var heartbeatUtcLine = CreateHeartbeatUtcLine(heartbeat);
+                var heartbeatTsIndex = lines.FindIndex(line => line.StartsWith("heartbeat_ts=", StringComparison.Ordinal));
+                var heartbeatUtcIndex = lines.FindIndex(line => line.StartsWith("heartbeat_utc=", StringComparison.Ordinal));
 
-                if (heartbeatIndex >= 0)
+                if (heartbeatTsIndex >= 0)
                 {
-                    lines[heartbeatIndex] = heartbeatLine;
+                    lines[heartbeatTsIndex] = heartbeatTsLine;
                 }
                 else
                 {
                     var gameStatusIndex = lines.FindIndex(line => line.StartsWith("game_status=", StringComparison.Ordinal));
-                    lines.Insert(gameStatusIndex >= 0 ? gameStatusIndex + 1 : 0, heartbeatLine);
+                    heartbeatTsIndex = gameStatusIndex >= 0 ? gameStatusIndex + 1 : 0;
+                    lines.Insert(heartbeatTsIndex, heartbeatTsLine);
+                    if (heartbeatUtcIndex >= heartbeatTsIndex)
+                        heartbeatUtcIndex++;
                 }
+
+                if (heartbeatUtcIndex >= 0)
+                    lines[heartbeatUtcIndex] = heartbeatUtcLine;
+                else
+                    lines.Insert(heartbeatTsIndex + 1, heartbeatUtcLine);
 
                 File.WriteAllText(tempPath, string.Join("\r\n", lines), s_utf8WithoutBom);
                 File.Move(tempPath, targetPath, true);
@@ -111,6 +125,11 @@ public static class PvpUserStatusService
                     File.Delete(tempPath);
             }
         }
+    }
+
+    private static string CreateHeartbeatUtcLine(DateTimeOffset heartbeat)
+    {
+        return $"heartbeat_utc={heartbeat.ToString("yyyy-MM-dd'T'HH:mm:ss", CultureInfo.InvariantCulture)}";
     }
 
     private static string SanitizeValue(string value)
