@@ -291,7 +291,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
 
     private void InitPvpHeartbeatTimer(CompositeDisposable disposable)
     {
-        _pvpHeartbeatTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+        _pvpHeartbeatTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
         _pvpHeartbeatTimer.Tick += PvpHeartbeatTimer_Tick;
         _pvpHeartbeatTimer.Start();
 
