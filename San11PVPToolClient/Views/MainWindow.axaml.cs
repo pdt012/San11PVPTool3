@@ -67,7 +67,7 @@ public partial class MainWindow : ReactiveWindow<MainViewModel>
             }).DisposeWith(disposables);
         });
     }
-    
+
     private bool _isCheckingClose;
     private void OnClosing(object? sender, WindowClosingEventArgs e)
     {
@@ -87,7 +87,12 @@ public partial class MainWindow : ReactiveWindow<MainViewModel>
             {
                 var canClose = await ViewModel.CanCloseAsync();
                 if (canClose)
+                {
+                    // 退出前先关闭连接
+                    if (!ViewModel.Client.IsTerminated)
+                        await ViewModel.Client.LeaveRoom();
                     Close();
+                }
             }
             finally
             {

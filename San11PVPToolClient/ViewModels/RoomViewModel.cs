@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Threading;
+using MsBox.Avalonia.Enums;
 using ReactiveUI;
 using San11PVPToolClient.Models;
 using San11PVPToolClient.Services;
@@ -38,6 +39,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
                 // 对玩家列表排序
                 value = value with { Players = SortPlayers(value.Players) };
             }
+
             this.RaiseAndSetIfChanged(ref field, value);
         }
     }
@@ -59,7 +61,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
         get;
         set => this.RaiseAndSetIfChanged(ref field, value);
     } = false;
-    
+
     private readonly ObservableAsPropertyHelper<bool> _isRoomOwner;
     public bool IsRoomOwner => _isRoomOwner.Value;
 
@@ -69,7 +71,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
     private readonly OnlineService _client;
     private readonly UserSettingsService _userSettingsService;
 
-    private CancellationTokenSource _cts;
+    private CancellationTokenSource _connectCts;
 
     private DateTime _saveDataMTime;
     private DispatcherTimer? _saveDataCheckTimer;
@@ -82,7 +84,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
     public ReactiveCommand<Unit, Unit> LeaveRoomCommand { get; }
     public ReactiveCommand<Unit, Unit> CloseRoomCommand { get; }
     public ReactiveCommand<Unit, Unit> UploadSaveCommand { get; }
-    public ReactiveCommand<Unit, Unit> DownloadSaveCommand { get; }
+    public ReactiveCommand<Unit, bool> DownloadSaveCommand { get; }
     public ReactiveCommand<Unit, Unit> SendMessageCommand { get; }
     public ReactiveCommand<Unit, Unit> ClearMessagesCommand { get; }
     public ReactiveCommand<Unit, Unit> SetRoomConfigCommand { get; }
@@ -100,7 +102,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
         _mainViewModel = mainViewModel;
         _client = client;
         _userSettingsService = userSettingsService;
-        
+
         _isRoomOwner = this
             .WhenAnyValue(x => x.UserInfo)
             .Select(u => u != null && u.IsRoomOwner)
@@ -147,7 +149,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
             {
                 if (connected == true)
                 {
-                    AddSystemMessage("成功连接到服务器", level:MessageLevel.Success);
+                    AddSystemMessage("成功连接到服务器", level: MessageLevel.Success);
                     IsOnline = true;
                     WritePvpUserStatus();
                 }
@@ -158,12 +160,14 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
                     WritePvpUserStatus();
                     if (!_client.IsTerminated) // 没有彻底终止连接，说明是网络问题，尝试重连
                     {
+                        bool reconnected = false;
                         for (int i = 0; i < 5; i++)
                         {
                             try
                             {
                                 AddSystemMessage($"尝试重连({i + 1}/5)...");
-                                await _client.Reconnect(_cts.Token);
+                                await _client.Reconnect(_connectCts.Token);
+                                reconnected = true;
                                 break;
                             }
                             catch
@@ -175,8 +179,11 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
                         }
 
                         // 重连失败
-                        AddSystemMessage("无法连接到服务器", MessageLevel.Warning);
-                        await _client.TerminateSocket();
+                        if (!reconnected)
+                        {
+                            AddSystemMessage("无法连接到服务器", MessageLevel.Warning);
+                            await _client.TerminateSocket();
+                        }
                     }
                 }
             })
@@ -188,7 +195,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
                 var byPlayer = eventData.ByPlayer;
                 if (eventData.KickedPlayer.PlayerId == UserInfo?.PlayerId)
                 {
-                    AddSystemMessage($"你被{eventData.ByPlayer.Name}踢出房间", level:MessageLevel.Highlight);
+                    AddSystemMessage($"你被{eventData.ByPlayer.Name}踢出房间", level: MessageLevel.Highlight);
                     WritePvpUserStatus(false);
                     await _client.TerminateSocket();
                 }
@@ -202,7 +209,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
         _client.Events.RoomClosed
             .Subscribe(async _ =>
             {
-                AddSystemMessage("房间已关闭", level:MessageLevel.Highlight);
+                AddSystemMessage("房间已关闭", level: MessageLevel.Highlight);
                 WritePvpUserStatus(false);
                 await _client.TerminateSocket();
             })
@@ -223,7 +230,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
             .DisposeWith(disposable);
 
         _client.Events.SaveUploaded
-            .Subscribe(async eventData =>
+            .Subscribe(eventData =>
             {
                 var player = eventData.Player;
                 SaveDataSummary = eventData.SaveDataSummary;
@@ -238,22 +245,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
                     AddSystemMessage($"{player.Name}上传了存档");
                     if (SaveDataSummary != null && SaveDataSummary.NextPlayerKingName == UserInfo?.KingName)
                     {
-                        if (_userSettingsService.Settings.AutoDownload)
-                        {
-                            AddSystemMessage("自动下载存档");
-                            await DownloadSave();
-                            await _mainViewModel.ShowMsgBoxAsync("你的回合",
-                                "轮到你的回合了，请载入31号存档继续游戏！",
-                                location: WindowStartupLocation.CenterScreen);
-                        }
-                        else
-                        {
-                            await _mainViewModel.ShowMsgBoxAsync("你的回合",
-                                "轮到你的回合了，请下载存档后载入31号存档继续游戏！",
-                                location: WindowStartupLocation.CenterScreen);
-                        }
-
-                        AddSystemMessage("你的回合", level: MessageLevel.Highlight);
+                        _ = OnMyTurn();
                     }
                 }
 
@@ -275,18 +267,28 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
             })
             .DisposeWith(disposable);
 
-        _cts = new CancellationTokenSource();
+        _connectCts = new CancellationTokenSource();
         // 当 deactivate 时自动取消
         Disposable.Create(() =>
             {
                 WritePvpUserStatus(false);
-                _cts.Cancel();
-                _cts.Dispose();
+                _connectCts.Cancel();
+                _connectCts.Dispose();
             })
             .DisposeWith(disposable);
 
         InitAutoUploadTimer();
         InitPvpHeartbeatTimer(disposable);
+        Disposable.Create(() =>
+            {
+                // 退出时关闭 timer
+                if (_saveDataCheckTimer != null && _saveDataCheckTimer.IsEnabled)
+                {
+                    _saveDataCheckTimer.Stop();
+                    _saveDataCheckTimer.Tick -= SaveDataCheckTimer_TickAsync;
+                }
+            })
+            .DisposeWith(disposable);
     }
 
     private void InitPvpHeartbeatTimer(CompositeDisposable disposable)
@@ -406,7 +408,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
         }
     }
 
-    private async Task DownloadSave()
+    private async Task<bool> DownloadSave()
     {
         await _autoUploadSemaphore.WaitAsync();
         try
@@ -416,10 +418,12 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
             var mtime = File.GetLastWriteTime(saveDataPath);
             _saveDataMTime = mtime; // 避免触发自动上传
             WritePvpUserStatus();
+            return true;
         }
         catch (Exception ex)
         {
             AddSystemMessage($"下载失败：{ex.Message}", MessageLevel.Error);
+            return false;
         }
         finally
         {
@@ -482,7 +486,7 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
         Dispatcher.UIThread.Post(() =>
         {
             Messages.Add(new(message.SenderId, message.SenderName, message.Message, DateTime.Now,
-                DisplayAlignment: message.SenderId == UserInfo?.PlayerId ? "Right" : "Left"));
+                SenderIsMe: message.SenderId == UserInfo?.PlayerId));
         });
     }
 
@@ -492,6 +496,54 @@ public class RoomViewModel : ViewModelBase, IRoutableViewModel
             .OrderByDescending(player => player.PlayerId == UserInfo?.PlayerId)
             .ThenByDescending(player => player.Role)
             .ToList();
+    }
+
+    private async Task OnMyTurn()
+    {
+        if (_userSettingsService.Settings.AutoDownload)
+        {
+            AddSystemMessage("自动下载存档");
+            if (await TryDownloadWithRetryAsync())
+            {
+                await _mainViewModel.ShowMsgBoxAsync("你的回合",
+                    "轮到你的回合了，请载入31号存档继续游戏！",
+                    location: WindowStartupLocation.CenterScreen);
+            }
+            else
+            {
+                await _mainViewModel.ShowMsgBoxAsync("你的回合",
+                    "轮到你的回合了，自动下载存档失败，请手动下载存档后载入31号存档继续游戏！",
+                    icon: Icon.Warning,
+                    location: WindowStartupLocation.CenterScreen);
+            }
+        }
+        else
+        {
+            await _mainViewModel.ShowMsgBoxAsync("你的回合",
+                "轮到你的回合了，请下载存档后载入31号存档继续游戏！",
+                location: WindowStartupLocation.CenterScreen);
+        }
+
+        AddSystemMessage("你的回合", level: MessageLevel.Highlight);
+        return;
+
+        async Task<bool> TryDownloadWithRetryAsync(int maxRetryCount = 3)
+        {
+            for (int attempt = 1; attempt <= maxRetryCount; attempt++)
+            {
+                if (await DownloadSave())
+                    return true;
+
+                if (attempt < maxRetryCount)
+                {
+                    AddSystemMessage($"尝试重新下载({attempt}/{maxRetryCount - 1})...");
+                    await Task.Delay(1000);
+                }
+            }
+
+            AddSystemMessage("重新下载失败，请手动下载存档", MessageLevel.Warning);
+            return false;
+        }
     }
 
     private void UpdatePlayerForceId()
