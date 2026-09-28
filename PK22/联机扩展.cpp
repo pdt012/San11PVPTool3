@@ -10,15 +10,18 @@ date=2026/3/20
 ## 一、自动存档时机
 1. 回合结束时（无论玩家或AI），判断下一个行动势力，如果是玩家，则随机选取一个贼势力插入到玩家势力前，并改为玩家；
    * 在onNewDay时，判断第一个势力是否为正常玩家。如是，则执行同样的加入贼势力并将其改为玩家的逻辑；
-2. 在'贼势力玩家'回合结束时，自动存档。确保自动存档的下一个势力，必定是下一个应该行动的玩家；
+2. 在'贼势力玩家'回合开始时，自动存档。确保自动存档的下一个势力，必定是下一个应该行动的玩家；
 3. 存档之前把下一个行动的玩家势力存入共享文件；
 4. 正常玩家过回合时，再将'贼势力玩家'移回turn table原位，并改回为AI;
 5. 理论上，当把'贼势力'变为玩家时，不会对贼势力有操作；当把'贼势力'移回原位并改回AI后，贼势力还会自动按正常AI逻辑操作。
 
 ## 二、自动读档时机
 1. 当收到联机工具通知，当前行动势力等于当前玩家时，自动读档；
-2. 如果读出的存档，当前保存的势力为'贼势力玩家'时，游戏会自动过该AI回合，进入当前玩家回合，无需特别处理；
-3. 如果读出的存档，如果当前保存的势力为玩家时，理论上该玩家必定不是当前玩家。则cpp需自动结束该玩家回合，进入当前玩家回合。
+2. 联机工具与AngelScript脚本的通讯方式：通过/pk2.2/Koei/San11/SaveData/PVPUserStatus
+	* 当前行动势力为当前玩家时，联机工具自动把存档文件和PVPUserStatus文件传入SaveData文件夹；
+	* AngelScript脚本每2S读取PVPUserStatus，判断当前行动势力是否等于当前玩家
+3. 如果读出的存档，当前保存的势力为'贼势力玩家'时，游戏会自动过该AI回合，进入当前玩家回合，无需特别处理；
+4. 如果读出的存档，如果当前保存的势力为玩家时，理论上该玩家必定不是当前玩家。则cpp需自动结束该玩家回合，进入当前玩家回合。
 
 ## 三、举例说明
 * 新开游戏时行动顺序：电脑1 -> 电脑2 -> 玩家1 -> 电脑3 -> 玩家2 -> 玩家3 -> 电脑4 -> ... -> 贼1 -> 贼2 -> ...
@@ -35,20 +38,31 @@ date=2026/3/20
    1. [此问题已通过'贼势力玩家'解决] 玩家势力为本回合第一个行动势力时，无法在此玩家行动前触发自动存档；
    2. 存在"二动"问题
    因此修改turn_table为按照势力id固定顺序
+
+## 五、关于贼势力的几点说明：固定为5个贼势力，不会灭亡，总是处于turn_table的最后5个位置，玩家无法选择贼势力进行游戏；
 */
 
 namespace 联机扩展
 {
+    const uint8 CH_CR   = 13; // '\r'
+    const uint8 CH_LF   = 10; // '\n'
+    const uint8 CH_HASH = 35; // '#'
+    const int64 HEARTBEAT_STALE_SECONDS = 30; // 超过30秒无更新视为工具已离线
+    const int REFRESH_INTERVAL = 1500; // 毫秒
+
     bool 调试模式 = false;
+    bool g_is_online = false;
     int turn_table_type = 1; // 0: 原版顺序(改); 1: 固定顺序
     DlgPVPInfo@ g_dlg_pvp_info = null;
     bool g_auto_skip_turn = false;
+    int last_refresh_time = 0;
     array<int> g_arr_bandit_force_id = {势力_羌, 势力_山越, 势力_乌丸, 势力_南蛮, 势力_盗贼};
 
     class Main
     {
         int priority = 101;
-        int player_count = 0;
+        private int _player_count = 0;
+        private bool _if_enable_on_game_draw = false;
         private bool _is_just_loaded = false;
         // 是否是新开游戏首回合首个玩家，用于控制**不在**首回合首个玩家前插入贼势力
         private bool _if_need_insert_bandit = false;
@@ -69,7 +83,7 @@ namespace 联机扩展
             // onLoad时计算player_count，以判断当前是否为联机模式，未来应该不使用player_count判断
             pk::bind(106, pk::trigger106_t(onLoad));
 
-            // onNewDay时重设turn_table
+            // onNewDay时判断turn_table第一个势力，如果是玩家，则插入贼势力并改为玩家
             pk::bind(107, pk::trigger107_t(onNewDay));
 
             // onTurnStart时隐藏联机信息框，激活操作
@@ -77,6 +91,9 @@ namespace 联机扩展
 
             // onTurnEnd时处理自动保存的逻辑，显示联机信息框并禁操作
             pk::bind(112, pk::trigger112_t(onTurnEnd));
+
+            // onGameDraw（进入大地图后）时触发，用于刷新当前玩家势力，自动读档和过回合
+            pk::bind(120, pk::trigger120_t(onGameDraw));
 
             // 打开message box时触发，用于自动跳过贼势力玩家的msgbox
             pk::bind(227, pk::trigger227_t(onPersonSetMsgBox));
@@ -86,17 +103,19 @@ namespace 联机扩展
         {
             // if (pk::get_scenario().loaded == false)
             // {
-            // 新开游戏，非读档情况
-            this.player_count = get_player_count();
-            //     pk::trace("联机扩展onGameInit...读取player_count");
+            // 新开游戏，及每次读档时，重新获取当前玩家数，避免玩家势力灭亡或玩家主动/被动退出而导致的玩家数变化
+            _player_count = get_player_count();
+            g_is_online = is_online_session();
+            pk::trace("联机扩展onGameInit...player_count: " + _player_count + ", g_is_online: " + g_is_online);
             // }
+
+            if (_player_count < 2 || !g_is_online)
+                return;
 
             int force_id = pk::get_current_turn_force_id();
             pk::force@ force = pk::get_force(force_id);
 
             pk::trace("联机扩展onGameInit...当前势力: " + pk::decode(pk::get_name(force)) + ", " + (force.is_player() ? "***玩家***" : "电脑"));
-            if (player_count < 2)
-                return;
 
             // 🔵INFO: 读档时会销毁g_dlg_pvp_info.main_dlg，因此在这里新建
             if (g_dlg_pvp_info is null)
@@ -114,17 +133,32 @@ namespace 联机扩展
             {
                 // 读取玩存档的首回合，必定是设为玩家的贼势力
                 int next_force_id = get_next_force_id_in_same_turn();
-                if (pk::is_valid_force_id(next_force_id))
+
+                g_dlg_pvp_info.set_visible(true);
+
+                if (force.is_player() && !pk::is_normal_force(force))
                 {
                     pk::force@ next_force = pk::get_force(next_force_id);
                     g_dlg_pvp_info.set_action_player(pk::get_name(next_force));
+
+                    PVPStatusData@ status = read_pvp_status();
+                    if (status !is null)
+                    {
+                        // pk::force@ next_force = pk::get_force(next_force_id);
+                        // string next_force_name = next_force_id >= 0 ? pk::get_name(next_force) : "";
+                        int my_force_id = status.get_int("my_force_id");
+
+                        if (my_force_id == next_force_id)
+                        {
+                            pk::message_box(pk::encode("请执行过回合操作，进入您的回合。"));
+                        }
+                    }
+                    // pk::next_turn();
                 }
                 else
                 {
                     g_dlg_pvp_info.set_action_player("");
                 }
-
-                g_dlg_pvp_info.set_visible(true);
             }
             else
             {
@@ -142,7 +176,11 @@ namespace 联机扩展
 
         void onLoad(int file_id, pk::s11reader@ r)
         {
+            if (_player_count < 2 || !g_is_online)
+                return;
+
             pk::trace("联机扩展onLoad...START");
+            _if_enable_on_game_draw = false;
             _is_just_loaded = true;
             _if_need_insert_bandit = true; // 联机模式读档时，必定置为true
             g_auto_skip_turn = true;
@@ -151,6 +189,24 @@ namespace 联机扩展
             int force_id = pk::get_current_turn_force_id();
             pk::force@ force = pk::get_force(force_id);
 
+            if (!pk::is_normal_force(force) && force.is_player())
+            {
+                // 异族玩家势力时，检查下一个势力是否为自己，是则自动过回合
+                PVPStatusData@ status = read_pvp_status();
+                if (status !is null)
+                {
+                    int next_force_id = get_next_force_id_in_same_turn();
+                    pk::force@ next_force = pk::get_force(next_force_id);
+                    string next_force_name = next_force_id >= 0 ? pk::get_name(next_force) : "";
+                    int my_force_id = status.get_int("my_force_id");
+
+                    if (my_force_id == next_force_id)
+                    {
+                        // auto_next_turn(force);
+                        pk::trace("联机扩展: 当前势力贼势力玩家，下一势力是自己: " + pk::decode(next_force_name) + "，自动过贼势力*" + pk::decode(pk::get_name(force)) + "*回合完毕。");
+                    }
+                }
+            }
             pk::trace("======== ch::get_set_p(0).get_mod_set(信息迷雾系统_开关): " + ch::get_set_p(0).get_mod_set(信息迷雾系统_开关));
 
             pk::trace("联机扩展onLoad...END, 已读取势力: " + pk::decode(pk::get_name(force)) + ", " + (force.is_player() ? "***玩家***" : "电脑"));
@@ -159,10 +215,10 @@ namespace 联机扩展
 
         void onNewDay()
         {
-            pk::trace("联机扩展onNewDay...START");
-            if (player_count < 2)
+            if (_player_count < 2 || !g_is_online)
                 return;
 
+            pk::trace("联机扩展onNewDay...START");
             // reset_turn_table(turn_table_type);
 
             pk::scenario@ scenario = pk::get_scenario();
@@ -171,20 +227,22 @@ namespace 联机扩展
             {
                 // 检查第一个势力是否为玩家
                 int first_force_id = scenario.get_turn_table_force_id(0);
-                if (pk::is_valid_force_id(first_force_id))
+                if (!pk::is_valid_force_id(first_force_id))
+                    return;
+                
+                pk::force@ first_force = pk::get_force(first_force_id);
+                if (first_force.is_player())
                 {
-                    pk::force@ first_force = pk::get_force(first_force_id);
-                    if (first_force.is_player())
+                    int bandit_force_id = find_suitable_bandit_force();
+                    if (bandit_force_id != -1)
                     {
-                        int bandit_force_id = find_suitable_bandit_force();
-                        if (bandit_force_id != -1)
-                        {
-                            move_force_to_index(bandit_force_id, 0);
-                            g_auto_skip_turn = true;
-                            // 如果是正常势力且为玩家，记录当前玩家及其同盟信息，以便于设置下个贼势力的同盟(开视野)
-                            _record_ally_forces(first_force);
-                            pk::trace("联机扩展onNewDay,第一个force" + pk::decode(pk::get_name(first_force)) + "为玩家,插入贼势力");
-                        }
+                        move_force_to_index(bandit_force_id, 0);
+                        g_auto_skip_turn = true;
+                        // // 如果是正常势力且为玩家，记录当前玩家及其同盟信息，以便于设置下个贼势力的同盟(开视野)
+                        // _record_ally_forces(first_force);
+                        // 将上一回合最后一个玩家的同盟信息应用到贼势力上(开视野)
+                        _apply_ally_to_bandit(pk::get_force(bandit_force_id));
+                        pk::trace("联机扩展onNewDay,第一个force" + pk::decode(pk::get_name(first_force)) + "为玩家,插入贼势力");
                     }
                 }
             }
@@ -196,9 +254,10 @@ namespace 联机扩展
 
         void onTurnStart(pk::force@ force)
         {
-            pk::trace("联机扩展onTurnStart... " + pk::decode(pk::get_name(force)) + ", " + (force.is_player() ? "***玩家***" : "电脑"));
-            if (player_count < 2)
+            if (_player_count < 2 || !g_is_online)
                 return;
+
+            pk::trace("联机扩展onTurnStart... " + pk::decode(pk::get_name(force)) + ", " + (force.is_player() ? "***玩家***" : "电脑"));
 
             bool is_normal_force = pk::is_normal_force(force);
 
@@ -216,8 +275,11 @@ namespace 联机扩展
                     pk::force@ next_force = pk::get_force(next_force_id);
                     // pk::message_box(pk::encode("联机扩展onTurnStart...当前势力为") + pk::get_name(force) + pk::encode(",下一势力") + pk::get_name(next_force) + pk::encode("为玩家"));
 
-                    set_force_to_player(force, player_count);
+                    set_force_to_player(force, _player_count);
+                    write_pvp_current_turn_player(next_force_id);
                     pk::save_game(31);
+                    // 启用定时刷新，等待联机工具通知
+                    _if_enable_on_game_draw = true;
 
                     if (调试模式)
                         pk::message_box(pk::encode("联机扩展onTurnStart...当前force为贼势力") + pk::get_name(force) + pk::encode(",且下一势力") + pk::get_name(next_force) + pk::encode("为玩家,自动保存"));
@@ -261,10 +323,10 @@ namespace 联机扩展
 
         void onTurnEnd(pk::force@ force)
         {
-            pk::trace("联机扩展onTurnEnd..." + pk::decode(pk::get_name(force)) + ", " + (force.is_player() ? "***玩家***" : "电脑"));
-            if (player_count < 2)
+            if (_player_count < 2 || !g_is_online)
                 return;
 
+            pk::trace("联机扩展onTurnEnd..." + pk::decode(pk::get_name(force)) + ", " + (force.is_player() ? "***玩家***" : "电脑"));
             // if (_is_just_loaded)
             // {
             //     // 如果是刚读档后第一次过回合，则不需再次自动存档
@@ -357,14 +419,7 @@ namespace 联机扩展
                         }
 
                         // 设置贼势力的同盟(开视野)
-                        if (bandit_force !is null)
-                        {
-                            for (uint i = 0; i < this.arr_ally_force.length; ++i)
-                            {
-                                int ally_force_id = this.arr_ally_force[i];
-                                bandit_force.set_ally(ally_force_id, true);
-                            }
-                        }
+                        _apply_ally_to_bandit(bandit_force);
                     }
                 }
             }
@@ -373,7 +428,10 @@ namespace 联机扩展
                 // 当前为贼势力
                 if (force.is_player())
                 {
-                    g_dlg_pvp_info.set_visible(false);
+                    if (g_dlg_pvp_info !is null && g_dlg_pvp_info.main_dlg !is null)
+                    {
+                        g_dlg_pvp_info.set_visible(false);
+                    }
                     g_auto_skip_turn = false;
                 }
             }
@@ -383,6 +441,9 @@ namespace 联机扩展
 
         void onPersonSetMsgBox(pk::person@ person)
         {
+            if (_player_count < 2 || !g_is_online)
+                return;
+            
             pk::scenario@ scenario = pk::get_scenario();
             int turn_idx = scenario.get_turn_table_index();
             int force_id = scenario.get_turn_table_force_id(turn_idx);
@@ -405,6 +466,9 @@ namespace 联机扩展
                     for (int i = start_id; i < start_id + child_count; ++i)
                     {
                         pk::widget@ widget = dlg73.find_child(i);
+                        if (widget is null)
+                            continue;
+                        
                         if (i != 2872)
                         {
                             widget.set_visible(false);
@@ -428,18 +492,67 @@ namespace 联机扩展
             }
         }
 
-        // void onGameDraw()
-        // {
-        //     if (player_count < 2)
-        //         return;
+        void onGameDraw()
+        {
+            if (!_if_enable_on_game_draw || _player_count < 2 || !g_is_online)
+                return;
 
-        //     if (pk::game::get_time() - last_refresh_time < REFRESH_INTERVAL)
-        //         return;
+            int curr_time = pk::game::get_time();
+            if (curr_time - last_refresh_time < REFRESH_INTERVAL)
+                return;
 
-        //     last_refresh_time = pk::game::get_time();
+            last_refresh_time = curr_time;
+            pk::trace("00000000000current time: " + curr_time);
 
-        //     pk::trace("联机扩展自动刷新");
-        // }
+            // int turn_idx = scenario.get_turn_table_index();
+            // int force_id = scenario.get_turn_table_force_id(turn_idx);
+
+            // if (!pk::is_valid_force_id(force_id))
+            // {
+            //     return;
+            // }
+
+            // pk::force@ force = pk::get_force(force_id);
+
+            // if (!pk::is_normal_force(force) && force.is_player())
+            // {
+                // 异族玩家势力时，检查下一个势力是否为自己，是则自动过回合
+                PVPStatusData@ status = read_pvp_status();
+                if (status !is null)
+                {
+                    int my_force_id = status.get_int("my_force_id");
+                    int next_force_id = status.get_int("current_turn_player_force_id");
+                    pk::force@ next_force = pk::get_force(next_force_id);
+                    string next_force_name = next_force_id >= 0 ? pk::get_name(next_force) : "";
+
+                    if (my_force_id == next_force_id)
+                    {
+                        // 下一个势力行动势力是自己
+                        g_dlg_pvp_info.set_action_player(next_force_name + pk::encode(" (我)"));
+
+                        // pk::message_box(pk::encode("联机通知: 轮到您行动了，请关闭所有打开的对话框，游戏将自动读档。"));
+                        // 自动读档
+                        pk::trace("联机扩展: 当前行动势力是自己: " + pk::decode(next_force_name) + "，开始自动读档。");
+                        pk::load_game(31);
+                        pk::trace("联机扩展: 当前行动势力是自己: " + pk::decode(next_force_name) + "，自动读档完毕。");
+
+                        // 过掉当前贼势力玩家的回合
+                        // pk::detail::funcref func0 = pk::async_t(_auto_next_turn);
+                        // pk::async(func0);
+                    }
+                    else
+                    {
+                        g_dlg_pvp_info.set_action_player(next_force_name);
+                        pk::trace("联机扩展: 当前行动势力是: " + pk::decode(next_force_name) + "，不是自己。");
+                    }
+
+                    bool found;
+                    string p1_name = status.get_string("p1_name", found);
+                }
+
+                g_auto_skip_turn = false;
+            // }
+        }
 
         // 记录当前玩家及其同盟信息，以便于设置下个贼势力的同盟(开视野)
         private void _record_ally_forces(pk::force@ force)
@@ -451,6 +564,13 @@ namespace 联机扩展
                 if (force.is_ally(i))
                     this.arr_ally_force.insertLast(i);
             }
+        }
+
+        private void _apply_ally_to_bandit(pk::force@ bandit)
+        {
+            if (bandit is null) return;
+            for (uint i = 0; i < arr_ally_force.length; ++i)
+                bandit.set_ally(arr_ally_force[i], true);
         }
 
         // private void _on_destory_dlg_pvp_info(pk::widget@ widget)
@@ -500,6 +620,11 @@ namespace 联机扩展
             auto force_ = pk::get_force(i);
             if (!pk::is_alive(force_))
                 continue;
+            
+            // 存档中可能会有'贼势力玩家'，需跳过
+            if (!pk::is_normal_force(force_))
+                continue;
+            
             if (force_.is_player())
                 count++;
         }
@@ -507,9 +632,51 @@ namespace 联机扩展
         return count;
     }
 
-    bool is_my_force_turn()
+    bool is_online_session()
     {
-        return true;
+        PVPStatusData@ status = read_pvp_status();
+        if (status is null)
+            return false;
+
+        if (status.get_int("game_status", 0) != 1)
+            return false;
+
+        bool found;
+        string ts_str = status.get_string("heartbeat_utc", found); // "2026-09-27T15:22:23"
+        if (!found || ts_str.length() < 19)
+            return false;
+
+        uint y  = parseInt(ts_str.substr(0, 4));
+        uint mo = parseInt(ts_str.substr(5, 2));
+        uint d  = parseInt(ts_str.substr(8, 2));
+        uint h  = parseInt(ts_str.substr(11, 2));
+        uint mi = parseInt(ts_str.substr(14, 2));
+        uint s  = parseInt(ts_str.substr(17, 2));
+
+        datetime hb_time(y, mo, d, h, mi, s);
+        datetime now; // 默认构造，UTC当前时间
+
+        int64 elapsed = now - hb_time;       // opSub，单位：秒
+        // pk::trace("联机扩展is_online_session... now-epoch: " + (now - epoch) + ", now2-epoch: " + (now2 - epoch) + ", now2-now: " + (now2 - now));
+        // pk::trace("联机扩展is_online_session...heartbeat_ts: " + ts_str + ", now-epoch: " + (now - epoch) + ", elapsed: " + elapsed);
+
+        // 留一点负值容差(-2s)应对极小的时钟误差/写入瞬间的时序问题
+        return elapsed > -2000 && elapsed < HEARTBEAT_STALE_SECONDS;
+    }
+
+    
+    void auto_next_turn(pk::force@ force)
+    {
+        // 过掉当前贼势力玩家的回合
+        // pk::detail::funcref func0 = pk::async_t(auto_next_turn_do);
+        // pk::async(func0);
+        pk::next_turn();
+        pk::trace("当前势力<" + pk::decode(pk::get_name(force)) + ">为异族玩家势力，自动过回合");
+    }
+
+    void auto_next_turn_do()
+    {
+        pk::next_turn();
     }
 
     /**
@@ -530,7 +697,7 @@ namespace 联机扩展
         pk::scenario@ scenario = pk::get_scenario();
         int turn_table_size = scenario.get_turn_table_size();
 
-        return turn_table_size - offset;
+        return turn_table_size - offset - 1; // 真实原始下标：最后一位是 size-1
     }
 
     /**
@@ -584,7 +751,6 @@ namespace 联机扩展
         int size = scenario.get_turn_table_size();
         int current_idx = -1;
 
-        // 1. 查找当前位置
         for (int i = 0; i < size; ++i)
         {
             if (scenario.get_turn_table_force_id(i) == force_to_move)
@@ -594,33 +760,23 @@ namespace 联机扩展
             }
         }
 
-        // 没找到或者已经在目标位置，直接跳过
         if (current_idx == -1 || current_idx == target_idx)
             return;
 
-        // 2. 索引修正（核心逻辑）
-        // 如果我们是从“上方”往下移，因为上方留出的空位会导致目标索引向上缩进，
-        // 为了确保能精准落在“傅彤”之前，我们需要将目标索引减 1。
-        int final_target = target_idx;
+        // 直接按 target_idx 执行平移，不做任何方向修正——
+        // force_to_move 执行后精确占据 target_idx，调用方自己算好想要的目标位置。
         if (current_idx < target_idx)
         {
-            final_target = target_idx - 1;
-        }
-
-        // 3. 执行平移（这一步逻辑保持不变，但使用修正后的 final_target）
-        if (current_idx < final_target)
-        {
-            for (int i = current_idx; i < final_target; ++i)
+            for (int i = current_idx; i < target_idx; ++i)
                 scenario.set_turn_table(i, scenario.get_turn_table_force_id(i + 1));
         }
         else
         {
-            for (int i = current_idx; i > final_target; --i)
+            for (int i = current_idx; i > target_idx; --i)
                 scenario.set_turn_table(i, scenario.get_turn_table_force_id(i - 1));
         }
 
-        // 4. 写入势力
-        scenario.set_turn_table(final_target, force_to_move);
+        scenario.set_turn_table(target_idx, force_to_move);
     } // move_force_to_index
 
     void print_turn_table()
@@ -683,25 +839,143 @@ namespace 联机扩展
         return true;
     }
 
-    class PVPInfo
+    string get_pvp_status_file_path()
     {
-        uint player_count = 0;
-        string my_force_name = "";
-        string current_force_name = "";
+        return pk::to_utf8(pk::core_dir) + "Koei/San11/SaveData/PVPUserStatus";
+    }
 
-        PVPInfo() {}
+    // 通信文件一次性读取的结果：把所有 key=value 解析进两个平行数组，
+    // 后续要读多少个字段都不用再开文件
+    class PVPStatusData
+    {
+        array<string> keys;
+        array<string> values;
+
+        // 返回原始字符串值；found 用于区分"没有这个字段"和"值本身是空字符串"
+        string get_string(const string &in key, bool &out found) const
+        {
+            for (uint i = 0; i < keys.length; i++)
+            {
+                if (keys[i] == key)
+                {
+                    found = true;
+                    return values[i];
+                }
+            }
+            found = false;
+            return "";
+        }
+
+        // 按 int 读取，找不到或值为空返回 defaultValue
+        int get_int(const string &in key, int defaultValue = -1) const
+        {
+            bool found;
+            string v = get_string(key, found);
+            if (!found || v.length() == 0)
+                return defaultValue;
+            return int(parseInt(v));
+        }
+    }
+
+    // 一次性打开并解析通信文件；打开失败返回 null
+    PVPStatusData@ read_pvp_status()
+    {
+        pk::file f;
+        if (f.open(get_pvp_status_file_path(), "r") < 0)
+        {
+            pk::trace("联机扩展: 无法打开通信文件进行读取: " + get_pvp_status_file_path());
+            return null;
+        }
+
+        PVPStatusData@ data = PVPStatusData();
+
+        while (!f.isEndOfFile())
+        {
+            string line = f.readLine();
+
+            while (line.length() > 0 &&
+                (line[line.length() - 1] == CH_CR || line[line.length() - 1] == CH_LF))
+            {
+                line.resize(line.length() - 1);
+            }
+
+            if (line.length() == 0 || line[0] == CH_HASH)
+                continue;
+
+            int eq_pos = line.findFirst("=");
+            if (eq_pos < 0)
+                continue;
+
+            data.keys.insertLast(line.substr(0, eq_pos));
+            data.values.insertLast(line.substr(eq_pos + 1));
+        }
+
+        f.close();
+        return data;
+    }
+
+    // 更新通信文件中的 current_turn_player_force_id 字段，其余内容原样保留
+    bool write_pvp_current_turn_player(int force_id)
+    {
+        string path = get_pvp_status_file_path();
+        string key = "current_turn_player_force_id";
+
+        pk::file f;
+        if (f.open(path, "r") < 0)
+        {
+            pk::trace("联机扩展: 无法打开通信文件进行写入(读取阶段): " + path);
+            return false;
+        }
+
+        array<string> lines;
+        bool found = false;
+
+        while (!f.isEndOfFile())
+        {
+            string line = f.readLine();
+
+            while (line.length() > 0 &&
+                (line[line.length() - 1] == CH_CR || line[line.length() - 1] == CH_LF))
+            {
+                line.resize(line.length() - 1);
+            }
+
+            int eq_pos = line.findFirst("=");
+            if (!found && eq_pos >= 0 && line.substr(0, eq_pos) == key)
+            {
+                line = pk::format("{}={}", key, force_id);
+                found = true;
+            }
+
+            lines.insertLast(line);
+        }
+        f.close();
+
+        if (!found)
+        {
+            pk::trace("联机扩展: 通信文件中未找到字段: " + key + "，写入取消");
+            return false;
+        }
+
+        if (f.open(path, "w") < 0)
+        {
+            pk::trace("联机扩展: 无法打开通信文件进行写入(写入阶段): " + path);
+            return false;
+        }
+
+        for (uint i = 0; i < lines.length; i++)
+            f.writeString(lines[i] + "\r\n");
+
+        f.close();
+        return true;
     }
 
     class DlgPVPInfo
     {
         pk::dialog@ main_dlg = null;
-        private pk::force@ _force = null;
         private pk::text@ _txt_actioning_player = null;
-        private int _dlg_x, _dlg_y = 0, _dlg_w = 240, _dlg_h = 42;
+        private int _dlg_x, _dlg_y = 0, _dlg_w = 200, _dlg_h = 42;
         // pk::detail::funcref on_widget_destory = null;
-
-        private int REFRESH_INTERVAL = 1000; // 毫秒
-        private int _last_refresh_time = 0;
 
         DlgPVPInfo() {}
 
@@ -711,7 +985,7 @@ namespace 联机扩展
             // _dlg_x = int((resolution.width - _dlg_w) / 2);
 
             @main_dlg = pk::new_dialog(false);
-            main_dlg.set_pos(240, 0);
+            main_dlg.set_pos(315, 0);
             main_dlg.set_size(_dlg_w, _dlg_h);
 
             pk::sprite9@ bg = main_dlg.create_sprite9(393);
@@ -719,7 +993,7 @@ namespace 联机扩展
             bg.set_color(0x60808080);
 
             pk::text@ txt = main_dlg.create_text();
-            txt.set_pos(10, 0);
+            txt.set_pos(5, 0);
             txt.set_size(120, 32);
             txt.set_text_font(FONT_BIG);
             txt.set_text(pk::encode("行动中玩家:"));
@@ -748,38 +1022,14 @@ namespace 联机扩展
         void reset()
         {
             @main_dlg = null;
-            @_force = null;
             @_txt_actioning_player = null;
             // on_dlg_destory = null;
         }
 
         private void _on_widget_update_txt_action_player(pk::widget@ widget, uint delta)
         {
-            int curr_time = pk::game::get_time();
-            if (curr_time - _last_refresh_time < REFRESH_INTERVAL)
-                return;
+            
 
-            _last_refresh_time = curr_time;
-
-            pk::scenario@ scenario = pk::get_scenario();
-            int turn_idx = scenario.get_turn_table_index();
-            int force_id = scenario.get_turn_table_force_id(turn_idx);
-
-            if (!pk::is_valid_force_id(force_id))
-            {
-                return;
-            }
-
-            @_force = pk::get_force(force_id);
-
-            if (g_auto_skip_turn && !pk::is_normal_force(_force) && _force.is_player())
-            {
-                // 异族玩家势力时，自动过回合
-                pk::detail::funcref func0 = pk::async_t(_auto_next_turn);
-                // pk::async(func0);
-
-                g_auto_skip_turn = false;
-            }
             // pk::trace("======== PvP Info Refreshed ========");
         }
 
@@ -794,12 +1044,6 @@ namespace 联机扩展
             reset();
             @g_dlg_pvp_info = null;
             pk::trace("_on_text_action_player_destory: text_action_player Destoryed");
-        }
-
-        private void _auto_next_turn()
-        {
-            pk::next_turn();
-            pk::trace("当前势力<" + pk::decode(pk::get_name(_force)) + ">为异族玩家势力，自动过回合");
         }
     }
 
