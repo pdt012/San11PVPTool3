@@ -38,4 +38,7 @@ public unsafe struct S11SaveDataHeader
     public uint playingMsecs; // 89 游戏总时长(ms)
     public uint8 difficulty; // 8d 难度
     public uint8 ageHistorical; // 8e 是否史实年龄
+    public fixed byte note[82]; // 8f 备注
+    public fixed uint8 cityForceColor[42]; // e1 载入页城市势力色
+    public fixed int cityInitPos[42]; // 10b 载入页城市坐标
 }
