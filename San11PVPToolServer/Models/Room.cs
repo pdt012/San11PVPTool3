@@ -17,7 +17,11 @@ public class Room
 
     public RoomInfo ToDTO()
     {
-        return new(RoomId, Config, Players.Values.Select(p => p.ToDTO()).ToList());
+        var publicConfig = new PublicRoomConfig(
+            Config.RoomName,
+            !string.IsNullOrEmpty(Config.Password),
+            Config.MaxPlayers);
+        return new(RoomId, publicConfig, Players.Values.Select(p => p.ToDTO()).ToList());
     }
 
     public RoomInfoSummary ToSummaryDTO()

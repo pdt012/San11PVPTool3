@@ -2,7 +2,7 @@
 
 public record RoomInfo(
     string RoomId,
-    RoomConfig Config,
+    PublicRoomConfig Config,
     List<PlayerInfo> Players
 )
 {

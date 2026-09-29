@@ -26,13 +26,7 @@ public static class RoomManager
     public static RoomInfo? GetRoomInfo(string roomId)
     {
         var room = GetRoom(roomId);
-        if (room == null) return null;
-
-        return new(room.RoomId, room.Config,
-            room.Players.Values
-                .Select(p => p.ToDTO())
-                .ToList()
-        );
+        return room?.ToDTO();
     }
 
     public static Room? GetRoom(string roomId)
@@ -48,6 +42,15 @@ public static class RoomManager
 
         room.Players.TryGetValue(playerId, out var player);
         return player;
+    }
+
+    public static Player? GetPlayerBySessionToken(string roomId, string sessionToken)
+    {
+        var room = GetRoom(roomId);
+        if (room == null) return null;
+
+        return room.Players.Values.FirstOrDefault(player =>
+            string.Equals(player.SessionToken, sessionToken, StringComparison.Ordinal));
     }
 
     public static Room AddRoom(RoomConfig config)
@@ -89,6 +92,7 @@ public static class RoomManager
         var player = new Player
         {
             PlayerId = Guid.NewGuid().ToString(),
+            SessionToken = Guid.NewGuid().ToString(),
             RoomId = roomId,
             Name = playerName,
             Role = role,

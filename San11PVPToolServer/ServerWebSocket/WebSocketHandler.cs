@@ -23,12 +23,11 @@ public static class WebSocketHandler
         }
 
         var roomId = context.Request.Query["roomId"].ToString();
-        var playerId = context.Request.Query["playerId"].ToString();
 
-        var player = RoomManager.GetPlayer(roomId, playerId);
+        var player = PlayerSessionAuth.Authenticate(context.Request, roomId);
         if (player == null)
         {
-            context.Response.StatusCode = 404;
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             return;
         }
 
@@ -37,7 +36,7 @@ public static class WebSocketHandler
         // 重连逻辑
         player.IsConnected = true;
 
-        WebSocketManager.AddSocket(roomId, playerId, socket);
+        WebSocketManager.AddSocket(roomId, player.PlayerId, socket);
         await RoomEventDispatcher.SendToRoom(
             roomId, EventTypes.RoomInfoUpdated,
             new RoomInfoUpdatedEventData(RoomManager.GetRoomInfo(roomId)));

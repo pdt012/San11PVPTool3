@@ -52,10 +52,11 @@ public class OnlineService
     /// <summary>
     /// 是否完全终止连接（不仅仅是掉线）
     /// </summary>
-    public bool IsTerminated => _roomId == null || _playerId == null;
+    public bool IsTerminated => _roomId == null || _playerId == null || _sessionToken == null;
 
     private string? _roomId;
     private string? _playerId;
+    private string? _sessionToken;
 
 
     #region NetworkConfig
@@ -106,12 +107,13 @@ public class OnlineService
     public async Task<(bool success, string message)> CreateRoom(string playerName, RoomConfig config,
         CancellationToken token)
     {
-        var response = await Api.CreateRoom(playerName, _playerId, config, token);
+        var response = await Api.CreateRoom(playerName, config, token);
         if (!response.Success)
             return (response.Success, response.Message);
 
         _roomId = response.RoomInfo.RoomId;
         _playerId = response.UserInfo.PlayerId;
+        _sessionToken = response.SessionToken;
 
         Events.OnLoginStateChanged(response.UserInfo, response.RoomInfo);
 
@@ -123,12 +125,15 @@ public class OnlineService
     public async Task<(bool success, string message)> JoinRoom(string roomId, string playerName,
         string? password, CancellationToken token)
     {
-        var response = await Api.JoinRoom(roomId, _playerId, playerName, password, token);
+        var response = await Api.JoinRoom(playerName, roomId, password, token);
         if (!response.Success)
             return (response.Success, response.Message);
+        if (response.RoomInfo == null || response.UserInfo == null || response.SessionToken == null)
+            throw new InvalidDataException("Server returned an incomplete join-room response.");
 
         _roomId = response.RoomInfo.RoomId;
         _playerId = response.UserInfo.PlayerId;
+        _sessionToken = response.SessionToken;
 
         Events.OnLoginStateChanged(response.UserInfo, response.RoomInfo);
 
@@ -139,48 +144,46 @@ public class OnlineService
 
     public async Task LeaveRoom()
     {
-        if (_roomId == null || _playerId == null) return;
+        if (_roomId == null || _sessionToken == null) return;
 
-        _ = Api.LeaveRoom(_playerId, _roomId);
-
-        _ = TerminateSocket();
+        await Api.LeaveRoom(_sessionToken, _roomId);
+        await TerminateSocket();
     }
 
     public async Task CloseRoom()
     {
-        if (_roomId == null || _playerId == null) return;
+        if (_roomId == null || _sessionToken == null) return;
 
-        _ = Api.CloseRoom(_playerId, _roomId);
-
-        _ = TerminateSocket();
+        await Api.CloseRoom(_sessionToken, _roomId);
+        await TerminateSocket();
     }
 
     public async Task KickPlayer(string targetPlayerId)
     {
-        if (_roomId == null || _playerId == null) return;
+        if (_roomId == null || _sessionToken == null) return;
 
-        await Api.KickPlayer(_playerId, _roomId, targetPlayerId);
+        await Api.KickPlayer(_sessionToken, _roomId, targetPlayerId);
     }
 
     public async Task SetOwner(string targetPlayerId)
     {
-        if (_roomId == null || _playerId == null) return;
+        if (_roomId == null || _sessionToken == null) return;
 
-        await Api.SetOwner(_playerId, _roomId, targetPlayerId);
+        await Api.SetOwner(_sessionToken, _roomId, targetPlayerId);
     }
 
     public async Task SetKingName(string targetPlayerId, string kingName)
     {
-        if (_roomId == null || _playerId == null) return;
+        if (_roomId == null || _sessionToken == null) return;
 
-        await Api.SetKingName(_playerId, _roomId, targetPlayerId, kingName);
+        await Api.SetKingName(_sessionToken, _roomId, targetPlayerId, kingName);
     }
 
     public async Task SetRoomConfig(RoomConfig config)
     {
-        if (_roomId == null || _playerId == null) return;
+        if (_roomId == null || _sessionToken == null) return;
 
-        await Api.SetRoomConfig(_playerId, _roomId, config);
+        await Api.SetRoomConfig(_sessionToken, _roomId, config);
     }
 
     public async Task SendMessage(string message)
@@ -190,21 +193,21 @@ public class OnlineService
 
     public async Task UploadSave(IList<string> filePaths)
     {
-        if (_roomId == null || _playerId == null) return;
+        if (_roomId == null || _sessionToken == null) return;
 
-        await Api.UploadSaveAsync(_playerId, _roomId, filePaths);
+        await Api.UploadSaveAsync(_sessionToken, _roomId, filePaths);
     }
 
     public async Task DownloadSave(string filePath)
     {
-        if (_roomId == null || _playerId == null) return;
+        if (_roomId == null || _sessionToken == null) return;
 
-        var files = await Api.GetSaveListAsync(_playerId, _roomId, Path.GetFileName(filePath));
+        var files = await Api.GetSaveListAsync(_sessionToken, _roomId, Path.GetFileName(filePath));
         // 先下载到临时文件
         foreach (var filename in files)
         {
             var tempPath = Path.ChangeExtension(filePath, Path.GetExtension(filename)) + ".tmp";
-            await Api.DownloadSaveAsync(_playerId, _roomId, filename, tempPath);
+            await Api.DownloadSaveAsync(_sessionToken, _roomId, filename, tempPath);
         }
         // 统一重命名
         foreach (var filename in files)
@@ -217,14 +220,14 @@ public class OnlineService
 
     public async Task<RoomInfo?> GetRoomInfo(CancellationToken token)
     {
-        if (_roomId == null || _playerId == null) return null;
+        if (_roomId == null || _sessionToken == null) return null;
 
-        return await Api.GetRoomInfo(_roomId, token);
+        return await Api.GetRoomInfo(_sessionToken, _roomId, token);
     }
 
     private async Task ConnectSocket(CancellationToken? token = null)
     {
-        if (_roomId == null || _playerId == null)
+        if (_roomId == null || _playerId == null || _sessionToken == null)
             throw new Exception("Room not initialized or socket terminated.");
 
         var wsUrl = ServerUrl
@@ -232,9 +235,9 @@ public class OnlineService
             .Replace("http://", "ws://")
             .Replace("https://", "wss://");
 
-        wsUrl += $"/ws?roomId={_roomId}&playerId={_playerId}";
+        wsUrl += $"/ws?roomId={Uri.EscapeDataString(_roomId)}";
 
-        await SocketClient.Connect(wsUrl, token);
+        await SocketClient.Connect(wsUrl, _sessionToken, token);
     }
 
     /// <summary>
@@ -244,6 +247,7 @@ public class OnlineService
     {
         _roomId = null;
         _playerId = null;
+        _sessionToken = null;
         Events.OnLoginStateChanged(null, null);
         await SocketClient.Disconnect();
     }

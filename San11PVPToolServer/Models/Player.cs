@@ -6,6 +6,9 @@ public class Player
 {
     public required string PlayerId { get; set; }
 
+    [System.Text.Json.Serialization.JsonIgnore]
+    public required string SessionToken { get; set; }
+
     public required string RoomId { get; set; }
 
     public required string Name { get; set; }

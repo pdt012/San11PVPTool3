@@ -34,16 +34,17 @@ public class WebSocketClient
         _events = events;
     }
 
-    public async Task Connect(string url, CancellationToken? token)
+    public async Task Connect(string url, string sessionToken, CancellationToken? token)
     {
         _url = url;
 
-        await ConnectInternal(token);
+        await ConnectInternal(sessionToken, token);
     }
 
-    private async Task ConnectInternal(CancellationToken? token)
+    private async Task ConnectInternal(string sessionToken, CancellationToken? token)
     {
         _socket = new ClientWebSocket();
+        _socket.Options.SetRequestHeader("Authorization", $"Bearer {sessionToken}");
         _cts = new CancellationTokenSource();
         
         CancellationToken tokenNotNull;

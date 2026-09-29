@@ -31,11 +31,15 @@ public partial class RoomView : ReactiveUserControl<RoomViewModel>
 
             ViewModel!.SetRoomConfigInteraction.RegisterHandler(async interaction =>
             {
+                var publicConfig = ViewModel.RoomInfo?.Config;
+                var editableConfig = publicConfig == null
+                    ? null
+                    : new RoomConfig(publicConfig.RoomName, null, publicConfig.MaxPlayers);
                 var dialog = new RoomConfigDialog
                 {
                     Title = "房间信息修改",
                     WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                    ViewModel = new RoomConfigDialogViewModel(ViewModel.RoomInfo?.Config)
+                    ViewModel = new RoomConfigDialogViewModel(editableConfig)
                 };
 
                 var result = await dialog.ShowDialog<RoomConfig?>(TopLevel.GetTopLevel(this) as Window);

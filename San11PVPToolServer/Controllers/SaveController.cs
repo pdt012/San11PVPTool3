@@ -23,15 +23,11 @@ public class SaveController : ControllerBase
 
     [HttpPost("upload")]
     public async Task<IActionResult> Upload(
-        [FromForm] string playerId,
         [FromForm] string roomId,
         [FromForm] List<IFormFile> files)
     {
-        // 验证权限
-        var player = RoomManager.GetPlayer(roomId, playerId);
+        var player = PlayerSessionAuth.Authenticate(Request, roomId);
         if (player == null)
-            return NotFound();
-        if (player.Role < PlayerRole.Player)
             return Unauthorized();
 
         var lockObj = SaveManager.GetLock(roomId);
@@ -75,13 +71,12 @@ public class SaveController : ControllerBase
 
     [HttpGet("list")]
     public IActionResult List(
-        [FromQuery] string playerId,
         [FromQuery] string roomId,
         [FromQuery] string filename)
     {
-        var player = RoomManager.GetPlayer(roomId, playerId);
+        var player = PlayerSessionAuth.Authenticate(Request, roomId);
         if (player == null)
-            return NotFound();
+            return Unauthorized();
 
         var baseSavePath = Path.Combine(_env.ContentRootPath,
             SaveManager.GetSavePath(roomId, filename));
@@ -102,13 +97,12 @@ public class SaveController : ControllerBase
 
     [HttpGet("download")]
     public async Task<IActionResult> Download(
-        [FromQuery] string playerId,
         [FromQuery] string roomId,
         [FromQuery] string filename)
     {
-        var player = RoomManager.GetPlayer(roomId, playerId);
+        var player = PlayerSessionAuth.Authenticate(Request, roomId);
         if (player == null)
-            return NotFound();
+            return Unauthorized();
 
         var lockObj = SaveManager.GetLock(roomId);
         await lockObj.WaitAsync();

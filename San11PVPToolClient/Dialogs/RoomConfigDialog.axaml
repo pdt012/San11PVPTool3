@@ -32,7 +32,7 @@
     <TextBox Text="{Binding RoomName}"
              Classes="Entry" Width="200" />
 
-    <TextBlock Text="密码" Classes="Label" />
+    <TextBlock Text="密码（留空将移除现有密码）" Classes="Label" />
     <TextBox Text="{Binding Password}"
              Classes="Entry" Width="200" />
 

@@ -8,6 +8,7 @@ public record CreateRoomRequest(
 public record CreateRoomResponse(
     PlayerInfo UserInfo,
     RoomInfo RoomInfo,
+    string SessionToken,
     bool Success,
     string Message
 );
@@ -19,43 +20,38 @@ public record JoinRoomRequest(
 );
 
 public record JoinRoomResponse(
-    PlayerInfo UserInfo,
-    RoomInfo RoomInfo,
+    PlayerInfo? UserInfo,
+    RoomInfo? RoomInfo,
+    string? SessionToken,
     bool Success,
     string Message
 );
 
 public record LeaveRoomRequest(
-    string PlayerId,
     string RoomId
 );
 
 public record CloseRoomRequest(
-    string PlayerId,
     string RoomId
 );
 
 public record KickPlayerRequest(
-    string PlayerId,
     string RoomId,
     string TargetPlayerId
 );
 
 public record SetOwnerRequest(
-    string PlayerId,
     string RoomId,
     string TargetPlayerId
 );
 
 public record SetKingNameRequest(
-    string PlayerId,
     string RoomId,
     string TargetPlayerId,
     string KingName
 );
 
 public record SetRoomConfigRequest(
-    string PlayerId,
     string RoomId,
     RoomConfig Config
 );
