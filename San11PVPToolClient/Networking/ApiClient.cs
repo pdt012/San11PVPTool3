@@ -96,6 +96,11 @@ public class ApiClient
         {
             case HttpStatusCode.Unauthorized:
                 throw new Exception("Upload failed: Your session is invalid or expired.");
+            case HttpStatusCode.BadRequest:
+                var message = await res.Content.ReadAsStringAsync();
+                throw new Exception($"Upload failed: {message}");
+            case HttpStatusCode.RequestEntityTooLarge:
+                throw new Exception("Upload failed: The upload exceeds the server size limit.");
             case HttpStatusCode.NotFound:
                 throw new Exception("Upload failed: Room not found.");
             default:

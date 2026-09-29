@@ -22,6 +22,8 @@ public class SaveController : ControllerBase
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
 
     [HttpPost("upload")]
+    [RequestSizeLimit(SaveManager.MaxRequestBodySizeBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = SaveManager.MaxRequestBodySizeBytes)]
     public async Task<IActionResult> Upload(
         [FromForm] string roomId,
         [FromForm] List<IFormFile> files)
@@ -30,13 +32,44 @@ public class SaveController : ControllerBase
         if (player == null)
             return Unauthorized();
 
+        if (files.Count is < 1 or > SaveManager.MaxUploadFileCount)
+            return BadRequest($"Upload must contain 1-{SaveManager.MaxUploadFileCount} save files.");
+
         var filesToSave = new List<(IFormFile File, string Path)>();
+        var fileNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        long totalSize = 0;
         foreach (var file in files)
         {
             if (!SaveManager.TryGetSavePath(roomId, file.FileName, out var path))
                 return BadRequest("Invalid save file name.");
+            if (!fileNames.Add(file.FileName))
+                return BadRequest("Duplicate save file name.");
+            if (file.Length <= 0 || file.Length > SaveManager.MaxUploadFileSizeBytes)
+                return BadRequest($"Each save file must be 1-{SaveManager.MaxUploadFileSizeBytes} bytes.");
+            if (totalSize > SaveManager.MaxTotalUploadSizeBytes - file.Length)
+                return BadRequest($"Total upload size exceeds {SaveManager.MaxTotalUploadSizeBytes} bytes.");
 
+            totalSize += file.Length;
             filesToSave.Add((file, path));
+        }
+
+        var mainSave = filesToSave.FirstOrDefault(item =>
+            string.Equals(item.File.FileName, SaveManager.DefaultFileName,
+                StringComparison.OrdinalIgnoreCase));
+        if (mainSave.File == null)
+            return BadRequest($"Upload must contain {SaveManager.DefaultFileName}.");
+
+        SaveDataSummary? saveDataSummary;
+        try
+        {
+            await using var saveStream = mainSave.File.OpenReadStream();
+            saveDataSummary = SaveDataParser.LoadSaveDataHeader(saveStream);
+        }
+        catch (Exception ex) when (ex is InvalidDataException or EndOfStreamException or
+                                   ArgumentException or IOException)
+        {
+            s_logger.Warn($"Rejected invalid save data: {ex.Message}");
+            return BadRequest("Invalid save data.");
         }
 
         var lockObj = SaveManager.GetLock(roomId);
@@ -50,18 +83,6 @@ public class SaveController : ControllerBase
 
                 await using var stream = System.IO.File.Create(path);
                 await file.CopyToAsync(stream);
-            }
-
-            // 分析存档
-            SaveDataSummary? saveDataSummary = null;
-            try
-            {
-                saveDataSummary = SaveDataParser.LoadSaveDataHeader(
-                    SaveManager.GetSavePath(roomId, SaveManager.DefaultFileName));
-            }
-            catch (Exception ex)
-            {
-                s_logger.Error(ex, "Failed to load save data");
             }
 
             s_logger.Info($"{player.Name}上传存档.(君主:{

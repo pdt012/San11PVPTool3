@@ -10,11 +10,25 @@ public static class SaveDataParser
 {
     public static unsafe SaveDataSummary? LoadSaveDataHeader(string saveDataPath)
     {
+        using var fs = File.OpenRead(saveDataPath);
+        return LoadSaveDataHeader(fs);
+    }
+
+    public static unsafe SaveDataSummary? LoadSaveDataHeader(Stream stream)
+    {
+        if (!stream.CanRead || !stream.CanSeek)
+            throw new ArgumentException("Save stream must be readable and seekable.", nameof(stream));
+
+        var streamStart = stream.Position;
+        var streamLength = stream.Length - streamStart;
+        var headerSize = Unsafe.SizeOf<S11SaveDataHeader>();
+        if (streamLength < headerSize)
+            throw new InvalidDataException("Save file header is incomplete.");
+        if (streamLength > SaveDataLimits.MaxFileSizeBytes)
+            throw new InvalidDataException($"Save file exceeds {SaveDataLimits.MaxFileSizeBytes} bytes.");
+
         byte[] buffer = new byte[Unsafe.SizeOf<S11SaveDataHeader>()];
-        using (var fs = File.OpenRead(saveDataPath))
-        {
-            fs.ReadExactly(buffer);
-        }
+        stream.ReadExactly(buffer);
 
         var bss = new BinaryStructStream(buffer);
         S11SaveDataHeader s11SaveDataHeader = new();
@@ -40,8 +54,10 @@ public static class SaveDataParser
         if (version == San11Version.PK22)
         {
             // PK2.2 加载存档中的行动顺序
-            // 读取存档
-            buffer = File.ReadAllBytes(saveDataPath);
+            // 在大小上限内读取存档
+            stream.Position = streamStart;
+            buffer = new byte[(int)streamLength];
+            stream.ReadExactly(buffer);
             bss = new BinaryStructStream(buffer);
             S11SaveData s11SaveData = new();
             s11SaveData.FromStream(bss);
@@ -60,6 +76,9 @@ public static class SaveDataParser
     private static unsafe bool TryGetNextPlayer(BinaryStructStream bss, ref string nextKingName, ref int nextForceId)
     {
         var turnTable = GetTurnTable(bss);
+        if (turnTable.turnTableSize is 0 or > 47 ||
+            turnTable.currentTurnIndex >= turnTable.turnTableSize)
+            return false;
         
         int loopStartId = turnTable.currentTurnIndex + 1; // 从下一个势力开始寻找
         for (int i = 0; i < turnTable.turnTableSize - 1 /*排除当前行动势力*/; i++)

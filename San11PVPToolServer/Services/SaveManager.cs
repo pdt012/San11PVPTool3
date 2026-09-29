@@ -1,5 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using NLog;
+using San11PVPToolShared.Utils;
 
 namespace San11PVPToolServer.Services;
 
@@ -7,6 +8,10 @@ public static class SaveManager
 {
     private const string SaveFolder = "saves";
     public const string DefaultFileName = "Save031.s11";
+    public const int MaxUploadFileCount = 3;
+    public const long MaxUploadFileSizeBytes = SaveDataLimits.MaxFileSizeBytes;
+    public const long MaxTotalUploadSizeBytes = 96L * 1024 * 1024;
+    public const long MaxRequestBodySizeBytes = MaxTotalUploadSizeBytes + 1024 * 1024;
 
     private static readonly HashSet<string> AllowedFileNames = new(StringComparer.OrdinalIgnoreCase)
     {
