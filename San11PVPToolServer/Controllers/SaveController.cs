@@ -87,7 +87,7 @@ public class SaveController : ControllerBase
 
             s_logger.Info($"{player.Name}上传存档.(君主:{
                 saveDataSummary?.CurrentKingName ?? "??"} -> {saveDataSummary?.NextPlayerKingName ?? "??"})");
-            _ = RoomEventDispatcher.SendToRoom(roomId, EventTypes.SaveUploaded,
+            await RoomEventDispatcher.SendToRoom(roomId, EventTypes.SaveUploaded,
                 new SaveUploadedEventData(player.ToDTO(), saveDataSummary));
         }
         finally
@@ -153,7 +153,7 @@ public class SaveController : ControllerBase
             s_logger.Info($"{player.Name}下载存档 {filename}");
             if (filename == SaveManager.DefaultFileName)
             {
-                _ = RoomEventDispatcher.SendToRoom(roomId, EventTypes.SystemMessage,
+                await RoomEventDispatcher.SendToRoom(roomId, EventTypes.SystemMessage,
                     new SystemMessageEventData($"{player.Name}下载了存档"));
             }
 

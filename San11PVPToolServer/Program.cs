@@ -72,11 +72,7 @@ public class Program
             {
                 try
                 {
-                    await RoomManager.EventActor.Enqueue(() =>
-                    {
-                        WebSocketHandler.CheckHeartbeat();
-                        return Task.CompletedTask;
-                    });
+                    await RoomManager.EventActor.Enqueue(WebSocketHandler.CheckHeartbeat);
                 }
                 catch (Exception ex)
                 {

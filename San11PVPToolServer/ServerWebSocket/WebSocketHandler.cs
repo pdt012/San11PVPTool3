@@ -34,18 +34,24 @@ public static class WebSocketHandler
         var socket = await context.WebSockets.AcceptWebSocketAsync();
 
         // 重连逻辑
-        player.IsConnected = true;
+        WebSocketConnection connection;
+        lock (player)
+        {
+            connection = WebSocketManager.AddSocket(roomId, player.PlayerId, socket);
+            player.IsConnected = true;
+            player.LastHeartbeat = DateTime.Now;
+        }
 
-        WebSocketManager.AddSocket(roomId, player.PlayerId, socket);
         await RoomEventDispatcher.SendToRoom(
             roomId, EventTypes.RoomInfoUpdated,
             new RoomInfoUpdatedEventData(RoomManager.GetRoomInfo(roomId)));
 
-        await ReceiveLoop(player, socket);
+        await ReceiveLoop(player, connection);
     }
 
-    private static async Task ReceiveLoop(Player player, WebSocket socket)
+    private static async Task ReceiveLoop(Player player, WebSocketConnection connection)
     {
+        var socket = connection.Socket;
         var buffer = new byte[1024];
 
         try
@@ -59,16 +65,19 @@ public static class WebSocketHandler
                     result = await socket.ReceiveAsync(buffer, CancellationToken.None);
                     if (result.MessageType == WebSocketMessageType.Close)
                     {
-                        await socket.CloseAsync(
-                            WebSocketCloseStatus.NormalClosure,
-                            "Closed by client",
-                            CancellationToken.None);
+                        await connection.CloseOutputAsync("Closed by client");
                         break;
                     }
                     ms.Write(buffer, 0, result.Count);
                 } while (!result.EndOfMessage);
 
-                player.LastHeartbeat = DateTime.Now;
+                lock (player)
+                {
+                    if (!WebSocketManager.IsCurrent(player.RoomId, player.PlayerId, connection))
+                        break;
+
+                    player.LastHeartbeat = DateTime.Now;
+                }
 
                 var msg = Encoding.UTF8.GetString(ms.ToArray());
 
@@ -89,15 +98,25 @@ public static class WebSocketHandler
         }
         finally
         {
-            player.IsConnected = false;
-            player.LastDisconnectTime = DateTime.Now;
+            bool removed;
+            lock (player)
+            {
+                removed = WebSocketManager.RemoveSocket(player.RoomId, player.PlayerId, connection);
+                if (removed)
+                {
+                    player.IsConnected = false;
+                    player.LastDisconnectTime = DateTime.Now;
+                }
+            }
 
-            WebSocketManager.RemoveSocket(player.RoomId, player.PlayerId);
-            await RoomEventDispatcher.SendToRoom(
-                player.RoomId, EventTypes.RoomInfoUpdated,
-                new RoomInfoUpdatedEventData(RoomManager.GetRoomInfo(player.RoomId)));
+            if (removed)
+            {
+                await RoomEventDispatcher.SendToRoom(
+                    player.RoomId, EventTypes.RoomInfoUpdated,
+                    new RoomInfoUpdatedEventData(RoomManager.GetRoomInfo(player.RoomId)));
+            }
 
-            socket.Dispose();
+            await connection.DisposeAsync();
         }
     }
 
@@ -125,15 +144,16 @@ public static class WebSocketHandler
             {
                 string msg = data.GetString();
 
-                _ = RoomEventDispatcher.SendToRoom(player.RoomId, EventTypes.ChatMessage,
+                await RoomEventDispatcher.SendToRoom(player.RoomId, EventTypes.ChatMessage,
                     new ChatMessage(player.PlayerId, player.Name, msg, DateTime.Now));
             }
             // 注册其他事件
         };
 
-    public static void CheckHeartbeat()
+    public static async Task CheckHeartbeat()
     {
         var now = DateTime.Now;
+        var closeTasks = new List<Task>();
         foreach (var room in RoomManager.GetRooms())
         {
             foreach (var player in room.Players.Values)
@@ -141,27 +161,27 @@ public static class WebSocketHandler
                 if (!player.IsConnected) continue;
                 if ((now - player.LastHeartbeat).TotalSeconds > 30)
                 {
-                    HandleTimeout(player);
+                    closeTasks.Add(HandleTimeout(player));
                 }
             }
         }
+
+        await Task.WhenAll(closeTasks);
     }
 
-    private static void HandleTimeout(Player player)
+    private static async Task HandleTimeout(Player player)
     {
-        var socket = WebSocketManager.GetSocket(player.RoomId, player.PlayerId);
-        if (socket == null) return;
-        if (socket.State != WebSocketState.Open) return;
+        var connection = WebSocketManager.GetConnection(player.RoomId, player.PlayerId);
+        if (connection == null || connection.State != WebSocketState.Open)
+            return;
+
         try
         {
-            socket.CloseAsync(
-                WebSocketCloseStatus.NormalClosure,
-                "Heartbeat timeout",
-                CancellationToken.None);
+            await connection.CloseOutputAsync("Heartbeat timeout");
         }
-        catch
+        catch (Exception ex)
         {
-            // ignored
+            s_logger.Warn(ex, $"Failed to close timed-out connection {connection.ConnectionId}");
         }
     }
 }

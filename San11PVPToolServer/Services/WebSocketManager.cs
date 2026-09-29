@@ -1,61 +1,75 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.Net.WebSockets;
 using NLog;
 
 namespace San11PVPToolServer.Services;
 
 /// <summary>
+/// 管理当前有效的 WebSocket 连接。连接的创建、接收循环和最终释放由上级调用者负责。
 /// </summary>
-/// 只负责socket的管理，socket的创建和关闭应由上级调用者负责
 public static class WebSocketManager
 {
-    private static readonly Logger logger = LogManager.GetCurrentClassLogger();
+    private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
 
-    private static ConcurrentDictionary<string, ConcurrentDictionary<string, WebSocket>> RoomPlayerSockets { get; } =
-        new();
+    private static readonly ConcurrentDictionary<(string RoomId, string PlayerId), WebSocketConnection>
+        Connections = new();
 
-    public static ICollection<WebSocket> GetRoomSockets(string roomId)
+    public static IReadOnlyList<WebSocketConnection> GetRoomConnections(string roomId)
     {
-        if (!RoomPlayerSockets.TryGetValue(roomId, out var room)) return [];
-        return room.Values;
+        return Connections
+            .Where(pair => pair.Key.RoomId == roomId)
+            .Select(pair => pair.Value)
+            .ToList();
     }
 
-    public static void AddSocket(string roomId, string playerId, WebSocket socket)
+    public static WebSocketConnection AddSocket(string roomId, string playerId, WebSocket socket)
     {
-        var room = RoomPlayerSockets.GetOrAdd(roomId, _ => new ConcurrentDictionary<string, WebSocket>());
+        var key = (roomId, playerId);
+        var connection = new WebSocketConnection(socket);
 
-        logger.Info($"player connected: {playerId}");
-        room.AddOrUpdate(playerId, socket, (_, old) =>
+        while (true)
         {
-            try { old.Dispose(); }
-            catch { }
-
-            return socket;
-        });
-    }
-
-    public static void RemoveSocket(string roomId, string playerId)
-    {
-        if (RoomPlayerSockets.TryGetValue(roomId, out var roomDict))
-        {
-            roomDict.TryRemove(playerId, out _);
-            logger.Info($"player disconnected: {playerId}");
-
-            if (roomDict.IsEmpty)
+            if (!Connections.TryGetValue(key, out var oldConnection))
             {
-                RoomPlayerSockets.TryRemove(roomId, out _);
+                if (Connections.TryAdd(key, connection))
+                    break;
+
+                continue;
             }
+
+            if (!Connections.TryUpdate(key, connection, oldConnection))
+                continue;
+
+            oldConnection.Abort();
+            break;
         }
+
+        s_logger.Info($"player connected: {playerId}, connection: {connection.ConnectionId}");
+        return connection;
     }
 
-    public static WebSocket? GetSocket(string roomId, string playerId)
+    public static bool RemoveSocket(string roomId, string playerId, WebSocketConnection connection)
     {
-        if (!RoomPlayerSockets.TryGetValue(roomId, out var room))
-            return null;
+        var pair = new KeyValuePair<(string RoomId, string PlayerId), WebSocketConnection>(
+            (roomId, playerId), connection);
+        var removed = ((ICollection<KeyValuePair<(string RoomId, string PlayerId), WebSocketConnection>>)
+            Connections).Remove(pair);
 
-        if (!room.TryGetValue(playerId, out var socket))
-            return null;
+        if (removed)
+            s_logger.Info($"player disconnected: {playerId}, connection: {connection.ConnectionId}");
 
-        return socket;
+        return removed;
+    }
+
+    public static bool IsCurrent(string roomId, string playerId, WebSocketConnection connection)
+    {
+        return Connections.TryGetValue((roomId, playerId), out var current) &&
+               ReferenceEquals(current, connection);
+    }
+
+    public static WebSocketConnection? GetConnection(string roomId, string playerId)
+    {
+        Connections.TryGetValue((roomId, playerId), out var connection);
+        return connection;
     }
 }

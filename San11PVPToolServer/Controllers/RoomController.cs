@@ -1,5 +1,4 @@
-﻿using System.Net.WebSockets;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using NLog;
 using San11PVPToolServer.ServerWebSocket;
 using San11PVPToolServer.Services;
@@ -33,33 +32,29 @@ public class RoomController : ControllerBase
     [HttpPost("join")]
     public async Task<IActionResult> Join([FromBody] JoinRoomRequest req)
     {
-        return await RoomManager.EventActor.Enqueue(() =>
+        return await RoomManager.EventActor.Enqueue<IActionResult>(async () =>
         {
             var room = RoomManager.GetRoom(req.RoomId);
 
             if (room == null)
-                return Task.FromResult(
-                    Ok(new JoinRoomResponse(null, null, null, false, "房间不存在")));
+                return Ok(new JoinRoomResponse(null, null, null, false, "房间不存在"));
 
             if (!string.IsNullOrEmpty(room.Config.Password) &&
                 room.Config.Password != req.Password)
-                return Task.FromResult(
-                    Ok(new JoinRoomResponse(null, null, null, false, "密码错误")));
+                return Ok(new JoinRoomResponse(null, null, null, false, "密码错误"));
 
             var player = RoomManager.AddPlayer(req.RoomId, req.PlayerName);
 
             if (player == null)
-                return Task.FromResult(
-                    Ok(new JoinRoomResponse(null, null, null, false, "房间已满")));
+                return Ok(new JoinRoomResponse(null, null, null, false, "房间已满"));
 
-            _ = RoomEventDispatcher.SendToRoom(req.RoomId, EventTypes.RoomInfoUpdated,
+            await RoomEventDispatcher.SendToRoom(req.RoomId, EventTypes.RoomInfoUpdated,
                 new RoomInfoUpdatedEventData(
                     RoomManager.GetRoomInfo(req.RoomId),
                     $"{player.Name}加入房间"
                 ));
 
-            return Task.FromResult(
-                Ok(new JoinRoomResponse(player.ToDTO(), room.ToDTO(), player.SessionToken, true, "")));
+            return Ok(new JoinRoomResponse(player.ToDTO(), room.ToDTO(), player.SessionToken, true, ""));
         });
     }
 
@@ -90,168 +85,169 @@ public class RoomController : ControllerBase
     [HttpPost("leave")]
     public async Task<IActionResult> Leave([FromBody] LeaveRoomRequest req)
     {
-        return await RoomManager.EventActor.Enqueue(() =>
+        return await RoomManager.EventActor.Enqueue<IActionResult>(async () =>
         {
             var player = PlayerSessionAuth.Authenticate(Request, req.RoomId);
             if (player == null)
-                return Task.FromResult<IActionResult>(Unauthorized());
+                return Unauthorized();
             logger.Info($"player({player.ShortId}) leave room({req.RoomId[..4]})");
 
             RoomManager.RemovePlayer(req.RoomId, player.PlayerId);
 
-            _ = RoomEventDispatcher.SendToRoom(req.RoomId, EventTypes.RoomInfoUpdated,
+            await RoomEventDispatcher.SendToRoom(req.RoomId, EventTypes.RoomInfoUpdated,
                 new RoomInfoUpdatedEventData(
                     RoomManager.GetRoomInfo(req.RoomId),
                     $"{player.Name}离开房间"
                 ));
 
-            return Task.FromResult<IActionResult>(Ok());
+            return Ok();
         });
     }
 
     [HttpPost("close")]
     public async Task<IActionResult> Close([FromBody] CloseRoomRequest req)
     {
-        return await RoomManager.EventActor.Enqueue(() =>
+        return await RoomManager.EventActor.Enqueue<IActionResult>(async () =>
         {
             // 验证权限
             var player = PlayerSessionAuth.Authenticate(Request, req.RoomId);
             if (player == null)
-                return Task.FromResult<IActionResult>(Unauthorized());
+                return Unauthorized();
             if (player.Role != PlayerRole.Owner)
-                return Task.FromResult<IActionResult>(StatusCode(StatusCodes.Status403Forbidden));
+                return StatusCode(StatusCodes.Status403Forbidden);
 
             logger.Info($"player({player.ShortId}) close room({req.RoomId[..4]})");
 
             // 通知并关闭所有用户的连接
-            _ = RoomEventDispatcher.SendToRoom(req.RoomId, EventTypes.RoomClosed, "",
+            await RoomEventDispatcher.SendToRoom(req.RoomId, EventTypes.RoomClosed, "",
                 disconnectAfterSent: true);
 
             // 清除房间
             RoomManager.RemoveRoom(req.RoomId);
 
-            return Task.FromResult<IActionResult>(Ok());
+            return Ok();
         });
     }
 
     [HttpPost("kick")]
     public async Task<IActionResult> Kick([FromBody] KickPlayerRequest req)
     {
-        return await RoomManager.EventActor.Enqueue(() =>
+        return await RoomManager.EventActor.Enqueue<IActionResult>(async () =>
         {
             // 验证权限
             var player = PlayerSessionAuth.Authenticate(Request, req.RoomId);
             if (player == null)
-                return Task.FromResult<IActionResult>(Unauthorized());
+                return Unauthorized();
             if (player.Role != PlayerRole.Owner)
-                return Task.FromResult<IActionResult>(StatusCode(StatusCodes.Status403Forbidden));
+                return StatusCode(StatusCodes.Status403Forbidden);
 
             var kicked = RoomManager.GetPlayer(req.RoomId, req.TargetPlayerId);
             if (kicked == null)
-                return Task.FromResult<IActionResult>(NotFound());
+                return NotFound();
 
             logger.Info($"player({player.ShortId}) kick ({kicked.ShortId})");
             // 断开连接
-            _ = RoomEventDispatcher.SendToRoom(req.RoomId, EventTypes.PlayerKicked,
+            await RoomEventDispatcher.SendToRoom(req.RoomId, EventTypes.PlayerKicked,
                 new PlayerKickedEventData(kicked.ToDTO(), player.ToDTO()));
-            var socket = WebSocketManager.GetSocket(req.RoomId, req.TargetPlayerId);
-            socket?.CloseAsync(WebSocketCloseStatus.NormalClosure, "Disconnected by server", CancellationToken.None);
+            var connection = WebSocketManager.GetConnection(req.RoomId, req.TargetPlayerId);
+            if (connection != null)
+                await connection.CloseOutputAsync("Disconnected by server");
             // 清除该用户
             RoomManager.RemovePlayer(req.RoomId, req.TargetPlayerId);
             // 更新房间信息
-            _ = RoomEventDispatcher.SendToRoom(req.RoomId, EventTypes.RoomInfoUpdated,
+            await RoomEventDispatcher.SendToRoom(req.RoomId, EventTypes.RoomInfoUpdated,
                 new RoomInfoUpdatedEventData(RoomManager.GetRoomInfo(req.RoomId)));
 
-            return Task.FromResult<IActionResult>(Ok());
+            return Ok();
         });
     }
 
     [HttpPost("set-owner")]
     public async Task<IActionResult> SetOwner([FromBody] SetOwnerRequest req)
     {
-        return await RoomManager.EventActor.Enqueue(() =>
+        return await RoomManager.EventActor.Enqueue<IActionResult>(async () =>
         {
             // 验证权限
             var player = PlayerSessionAuth.Authenticate(Request, req.RoomId);
             if (player == null)
-                return Task.FromResult<IActionResult>(Unauthorized());
+                return Unauthorized();
             if (player.Role != PlayerRole.Owner)
-                return Task.FromResult<IActionResult>(StatusCode(StatusCodes.Status403Forbidden));
+                return StatusCode(StatusCodes.Status403Forbidden);
 
             var newOwner = RoomManager.GetPlayer(req.RoomId, req.TargetPlayerId);
             if (newOwner == null)
-                return Task.FromResult<IActionResult>(NotFound());
+                return NotFound();
 
             logger.Info($"player({player.ShortId}) set ({newOwner.ShortId}) as new owner");
             // 重设身份
             player.Role = PlayerRole.Player;
             newOwner.Role = PlayerRole.Owner;
 
-            _ = RoomEventDispatcher.SendToRoom(req.RoomId, EventTypes.RoomInfoUpdated,
+            await RoomEventDispatcher.SendToRoom(req.RoomId, EventTypes.RoomInfoUpdated,
                 new RoomInfoUpdatedEventData(
                     RoomManager.GetRoomInfo(req.RoomId),
                     $"{player.Name}将{newOwner.Name}设置为新房主"
                 ));
 
-            return Task.FromResult<IActionResult>(Ok());
+            return Ok();
         });
     }
 
     [HttpPost("set-king-name")]
     public async Task<IActionResult> SetKingName([FromBody] SetKingNameRequest req)
     {
-        return await RoomManager.EventActor.Enqueue(() =>
+        return await RoomManager.EventActor.Enqueue<IActionResult>(async () =>
         {
             // 验证权限
             var player = PlayerSessionAuth.Authenticate(Request, req.RoomId);
             if (player == null)
-                return Task.FromResult<IActionResult>(Unauthorized());
+                return Unauthorized();
             var targetPlayer = RoomManager.GetPlayer(req.RoomId, req.TargetPlayerId);
             if (targetPlayer == null)
-                return Task.FromResult<IActionResult>(NotFound());
+                return NotFound();
             if (player.PlayerId != targetPlayer.PlayerId && player.Role != PlayerRole.Owner)
-                return Task.FromResult<IActionResult>(StatusCode(StatusCodes.Status403Forbidden));
+                return StatusCode(StatusCodes.Status403Forbidden);
 
             logger.Info($"player({player.ShortId}) set ({targetPlayer.ShortId})'s king name: {req.KingName}");
             // 设置君主名
             targetPlayer.KingName = req.KingName;
 
-            _ = RoomEventDispatcher.SendToRoom(req.RoomId, EventTypes.RoomInfoUpdated,
+            await RoomEventDispatcher.SendToRoom(req.RoomId, EventTypes.RoomInfoUpdated,
                 new RoomInfoUpdatedEventData(
                     RoomManager.GetRoomInfo(req.RoomId),
                     $"{player.Name}将{targetPlayer.Name}的君主名更改为[{targetPlayer.KingName}]"
                 ));
 
-            return Task.FromResult<IActionResult>(Ok());
+            return Ok();
         });
     }
 
     [HttpPost("set-config")]
     public async Task<IActionResult> SetRoomConfig([FromBody] SetRoomConfigRequest req)
     {
-        return await RoomManager.EventActor.Enqueue(() =>
+        return await RoomManager.EventActor.Enqueue<IActionResult>(async () =>
         {
             // 验证权限
             var player = PlayerSessionAuth.Authenticate(Request, req.RoomId);
             if (player == null)
-                return Task.FromResult<IActionResult>(Unauthorized());
+                return Unauthorized();
             if (player.Role != PlayerRole.Owner)
-                return Task.FromResult<IActionResult>(StatusCode(StatusCodes.Status403Forbidden));
+                return StatusCode(StatusCodes.Status403Forbidden);
             var room = RoomManager.GetRoom(req.RoomId);
             if (room == null)
-                return Task.FromResult<IActionResult>(NotFound());
+                return NotFound();
 
             logger.Info($"player({player.ShortId}) update room({room.ShortId}) config");
 
             room.Config = req.Config;
 
-            _ = RoomEventDispatcher.SendToRoom(req.RoomId, EventTypes.RoomInfoUpdated,
+            await RoomEventDispatcher.SendToRoom(req.RoomId, EventTypes.RoomInfoUpdated,
                 new RoomInfoUpdatedEventData(
                     RoomManager.GetRoomInfo(req.RoomId),
                     $"{player.Name}更新了房间信息"
                 ));
 
-            return Task.FromResult<IActionResult>(Ok());
+            return Ok();
         });
     }
 }
