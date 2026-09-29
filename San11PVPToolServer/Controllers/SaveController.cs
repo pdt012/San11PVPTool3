@@ -30,14 +30,22 @@ public class SaveController : ControllerBase
         if (player == null)
             return Unauthorized();
 
+        var filesToSave = new List<(IFormFile File, string Path)>();
+        foreach (var file in files)
+        {
+            if (!SaveManager.TryGetSavePath(roomId, file.FileName, out var path))
+                return BadRequest("Invalid save file name.");
+
+            filesToSave.Add((file, path));
+        }
+
         var lockObj = SaveManager.GetLock(roomId);
         await lockObj.WaitAsync();
 
         try
         {
-            foreach (var file in files)
+            foreach (var (file, path) in filesToSave)
             {
-                var path = SaveManager.GetSavePath(roomId, file.FileName);
                 Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
                 await using var stream = System.IO.File.Create(path);
@@ -78,8 +86,11 @@ public class SaveController : ControllerBase
         if (player == null)
             return Unauthorized();
 
+        if (!SaveManager.TryGetSavePath(roomId, filename, out var savePath))
+            return BadRequest("Invalid save file name.");
+
         var baseSavePath = Path.Combine(_env.ContentRootPath,
-            SaveManager.GetSavePath(roomId, filename));
+            savePath);
 
         if (!System.IO.File.Exists(baseSavePath))
             return NotFound();
@@ -104,13 +115,16 @@ public class SaveController : ControllerBase
         if (player == null)
             return Unauthorized();
 
+        if (!SaveManager.TryGetSavePath(roomId, filename, out var savePath))
+            return BadRequest("Invalid save file name.");
+
         var lockObj = SaveManager.GetLock(roomId);
         await lockObj.WaitAsync();
 
         try
         {
             var path = Path.Combine(_env.ContentRootPath,
-                SaveManager.GetSavePath(roomId, filename));
+                savePath);
 
             if (!System.IO.File.Exists(path))
                 return NotFound();
